@@ -33,7 +33,11 @@ A high-performance, seamless network speed monitor built specifically for Window
       - **Windows Native Alerts**: Balloon/toast alert notification when reaching warning threshold or exceeding data cap.
       - **Visual Warning Dot**: An amber dot (warning) or red dot (cap exceeded) appears in the top-right corner of the taskbar widget.
       - **Independent Resets**: Reset Today, This Month, or Session counters anytime without losing configuration.
-    - **Color Scheme**: Choose between Windows 11 Fluent (Mint & Amber), Ocean (Blue & Purple), Clean Monochrome (White & Silver), or Cyber Neon (Mint & Pink).
+    - **Color Scheme**:
+      - **Auto (Matches Windows Taskbar)**: Automatically detects whether your taskbar is Dark or Light and dynamically switches text colors and contrast shadows for optimal legibility.
+      - **Windows 11 Fluent (Dark)**: Mint (`#38E1B0`) and Amber (`#FFA447`) with crisp white values.
+      - **Windows 11 Light (High Contrast)**: Forest Emerald (`#00875A`) and Burnt Orange (`#D9531E`) with deep charcoal text (`#1A1A1A`).
+      - **Ocean (Blue & Purple)**, **Clean Monochrome (White & Silver)**, or **Cyber Neon (Mint & Pink)**.
     - **Layout**: Switch between 2 Rows (Stacked) and 1 Row (Inline horizontal).
     - **Text Size (DPI Scaling)**: Choose between **Compact (Small)**, **Standard (Default)**, or **Large (1440p / 4K)** for optimal readability across any monitor resolution.
     - **Widget Opacity**: Adjust transparency to blend into custom wallpapers or tools like *TranslucentTB* (**100% Solid**, **85% Subtle Glass**, **70% Translucent**, **50% Minimal/Ghost**).
