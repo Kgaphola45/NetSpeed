@@ -118,7 +118,9 @@ $defaultConfig = @{
     MiddleClickAction  = 'NetworkSettings' # TaskMgr, Snap, NetworkSettings, Connections
     Opacity            = 1.0               # 1.0, 0.85, 0.70, 0.50
     FontSizePreset     = 'Standard'        # Small, Standard, Large
-    DataCapGB          = 0                 # 0 = Disabled, 10, 25, 50, 100, etc.
+    DataCapGB          = 0                 # 0 = Disabled (legacy compatibility)
+    DataCapValue       = 0                 # Numeric limit (e.g. 500, 200, 1.5)
+    DataCapUnit        = 'GB'              # 'MB' or 'GB'
     DataCapPeriod      = 'Monthly'         # Monthly, Daily
     CapWarnPercent     = 80                # 70, 80, 90, 95
     DailyUsageDate     = ''                # 'yyyy-MM-dd'
@@ -143,6 +145,14 @@ function Load-Config {
             $cfg.MonthlyRxBytes = [long]$cfg.MonthlyRxBytes
             $cfg.MonthlyTxBytes = [long]$cfg.MonthlyTxBytes
             $cfg.DataCapGB      = [double]$cfg.DataCapGB
+            if ($null -ne $cfg.DataCapValue) {
+                $cfg.DataCapValue = [double]$cfg.DataCapValue
+            } else {
+                $cfg.DataCapValue = [double]$cfg.DataCapGB
+            }
+            if (-not $cfg.DataCapUnit) {
+                $cfg.DataCapUnit = 'GB'
+            }
             $cfg.CapWarnPercent = [int]$cfg.CapWarnPercent
             return $cfg
         } catch { }
@@ -156,6 +166,35 @@ function Save-Config {
     try {
         $script:Config | ConvertTo-Json -Depth 3 | Set-Content $configFile -Force
     } catch { }
+}
+
+function Get-DataCapBytes {
+    $val = if ($script:Config.DataCapValue -gt 0) { [double]$script:Config.DataCapValue } else { [double]$script:Config.DataCapGB }
+    if ($val -le 0) { return 0.0 }
+    $unit = if ($script:Config.DataCapUnit) { [string]$script:Config.DataCapUnit } else { 'GB' }
+    if ($unit -eq 'MB') { return ($val * 1MB) }
+    return ($val * 1GB)
+}
+
+function Get-DataCapDisplay {
+    $val = if ($script:Config.DataCapValue -gt 0) { [double]$script:Config.DataCapValue } else { [double]$script:Config.DataCapGB }
+    if ($val -le 0) { return 'Disabled' }
+    $unit = if ($script:Config.DataCapUnit) { [string]$script:Config.DataCapUnit } else { 'GB' }
+    return ("{0:0.##} {1}" -f $val, $unit)
+}
+
+function Set-DataCapSetting([double]$value, [string]$unit) {
+    $script:Config.DataCapValue = $value
+    $script:Config.DataCapUnit  = if ($unit) { $unit.ToUpper() } else { 'GB' }
+    if ($script:Config.DataCapUnit -eq 'MB') {
+        $script:Config.DataCapGB = [Math]::Round($value / 1024.0, 4)
+    } else {
+        $script:Config.DataCapGB = $value
+    }
+    $script:alertWarnTriggered     = $false
+    $script:alertExceededTriggered = $false
+    Save-Config
+    Check-DataCapAlert
 }
 
 # ------------------------------------------------------------------------------
@@ -643,10 +682,14 @@ function Set-ThemeColors {
     $valBrush  = $brushConverter.ConvertFromString($t.ValColor)
     $unitBrush = $brushConverter.ConvertFromString($t.UnitColor)
 
-    # Data Cap Alarm: Change text color to red at 90% if ($monthTotal -gt $cap*0.9)
-    $mTotal = [double]($script:Config.MonthlyRxBytes + $script:Config.MonthlyTxBytes)
-    $capB   = [double]$script:Config.DataCapGB * 1GB
-    if ($capB -gt 0 -and $mTotal -gt ($capB * 0.9)) {
+    # Data Cap Alarm: Change text color to red at 90% if ($usedB -gt $capB*0.9)
+    $capB  = Get-DataCapBytes
+    $usedB = if ($script:Config.DataCapPeriod -eq 'Daily') {
+        [double]($script:Config.DailyRxBytes + $script:Config.DailyTxBytes)
+    } else {
+        [double]($script:Config.MonthlyRxBytes + $script:Config.MonthlyTxBytes)
+    }
+    if ($capB -gt 0 -and $usedB -gt ($capB * 0.9)) {
         $valBrush = $brushConverter.ConvertFromString('#FF4365')
     }
 
@@ -1388,32 +1431,48 @@ $menu.Items.Add($menuTopConsumers) | Out-Null
 # ------------------------------------------------------------------------------
 # Data Cap Alarm & Monthly Cap Dialog
 # ------------------------------------------------------------------------------
-function Prompt-SetMonthlyCap {
+function Prompt-SetDataCap {
     try {
-        $curVal = if ($script:Config.DataCapGB -gt 0) { $script:Config.DataCapGB } else { 200 }
+        $defaultPrompt = if ($script:Config.DataCapValue -gt 0) {
+            "{0} {1}" -f $script:Config.DataCapValue, $script:Config.DataCapUnit
+        } elseif ($script:Config.DataCapGB -gt 0) {
+            "{0} GB" -f $script:Config.DataCapGB
+        } else {
+            "200 GB"
+        }
         $inputVal = [Microsoft.VisualBasic.Interaction]::InputBox(
-            "Enter Monthly Data Cap limit in Gigabytes (GB):`n(e.g. 200 for 200 GB, or 0 to disable alarm)",
-            "NetSpeedTaskbar - Set Monthly Cap",
-            $curVal.ToString()
+            "Enter Data Cap limit with unit (MB or GB):`n`nExamples:`n  - 500 MB  (or 500MB)`n  - 200 GB  (or 200GB)`n  - 1.5 GB`n  - 0 (to disable alarm)",
+            "NetSpeedTaskbar - Set Data Cap (MB or GB)",
+            $defaultPrompt
         )
         if (-not [string]::IsNullOrWhiteSpace($inputVal)) {
-            $parsed = 0.0
-            if ([double]::TryParse($inputVal.Trim(), [ref]$parsed) -and $parsed -ge 0) {
-                $script:Config.DataCapGB       = $parsed
-                $script:Config.DataCapPeriod   = 'Monthly'
-                $script:alertWarnTriggered     = $false
-                $script:alertExceededTriggered = $false
-                Save-Config
-                Check-DataCapAlert
+            $trimmed = $inputVal.Trim()
+            if ($trimmed -match '^(?i)^\s*([0-9]+(?:\.[0-9]+)?)\s*(mb|gb)?\s*$') {
+                $num = [double]$Matches[1]
+                $unit = if ($Matches[2]) { $Matches[2].ToUpper() } else { 'GB' }
+                if ($num -le 0) {
+                    Set-DataCapSetting 0 'GB'
+                } else {
+                    Set-DataCapSetting $num $unit
+                }
+            } else {
+                [System.Windows.MessageBox]::Show(
+                    "Invalid input format.`nPlease enter a number followed by MB or GB (e.g. 500 MB, 200 GB, or 0 to disable).",
+                    "NetSpeedTaskbar",
+                    [System.Windows.MessageBoxButton]::OK,
+                    [System.Windows.MessageBoxImage]::Warning
+                ) | Out-Null
             }
         }
     } catch { }
 }
 
-# Direct Right-Click Action: Set Monthly Cap (e.g. 200GB)...
+function Prompt-SetMonthlyCap { Prompt-SetDataCap }
+
+# Direct Right-Click Action: Set Data Cap (MB / GB)...
 $menuSetCapDirect = New-Object System.Windows.Controls.MenuItem
-$menuSetCapDirect.Header = 'Set Monthly Cap (e.g. 200GB)...'
-$menuSetCapDirect.Add_Click({ Prompt-SetMonthlyCap })
+$menuSetCapDirect.Header = 'Set Data Cap (MB / GB)...'
+$menuSetCapDirect.Add_Click({ Prompt-SetDataCap })
 $menu.Items.Add($menuSetCapDirect) | Out-Null
 
 # Data Cap Alarm Submenu
@@ -1422,51 +1481,86 @@ $menuDataUsage.Header = 'Data Cap Alarm'
 
 # Quick trigger inside submenu
 $itemSetCapSub = New-Object System.Windows.Controls.MenuItem
-$itemSetCapSub.Header = 'Set Monthly Cap (e.g. 200GB)...'
-$itemSetCapSub.Add_Click({ Prompt-SetMonthlyCap })
+$itemSetCapSub.Header = 'Set Custom Cap (MB / GB)...'
+$itemSetCapSub.Add_Click({ Prompt-SetDataCap })
 
-# Presets Submenu
-$menuCapLimit = New-Object System.Windows.Controls.MenuItem
-$menuCapLimit.Header = 'Monthly Cap Presets'
+# Gigabytes (GB) Presets Submenu
+$menuCapPresetsGB = New-Object System.Windows.Controls.MenuItem
+$menuCapPresetsGB.Header = 'Gigabytes (GB) Presets'
 
-$capOptions = @(
-    @{ Gb = 0;    Name = 'Disabled (Unlimited)' },
-    @{ Gb = 50;   Name = '50 GB' },
-    @{ Gb = 100;  Name = '100 GB' },
-    @{ Gb = 200;  Name = '200 GB (Recommended)' },
-    @{ Gb = 300;  Name = '300 GB' },
-    @{ Gb = 500;  Name = '500 GB' },
-    @{ Gb = 1000; Name = '1 TB (1000 GB)' }
+$gbOptions = @(
+    @{ Val = 0;    Name = 'Disabled (Unlimited)' },
+    @{ Val = 10;   Name = '10 GB' },
+    @{ Val = 25;   Name = '25 GB' },
+    @{ Val = 50;   Name = '50 GB' },
+    @{ Val = 100;  Name = '100 GB' },
+    @{ Val = 200;  Name = '200 GB (Recommended)' },
+    @{ Val = 500;  Name = '500 GB' },
+    @{ Val = 1000; Name = '1 TB (1000 GB)' }
 )
 
-foreach ($co in $capOptions) {
-    $itemCo = New-Object System.Windows.Controls.MenuItem
-    $itemCo.Header = $co.Name
-    $itemCo.Tag    = [double]$co.Gb
-    $itemCo.IsChecked = ([double]$script:Config.DataCapGB -eq [double]$co.Gb)
-    $itemCo.Add_Click({
+foreach ($opt in $gbOptions) {
+    $itemGb = New-Object System.Windows.Controls.MenuItem
+    $itemGb.Header = $opt.Name
+    $itemGb.Tag    = @{ Val = [double]$opt.Val; Unit = 'GB' }
+    $itemGb.Add_Click({
         param($s, $e)
-        $script:Config.DataCapGB       = [double]$s.Tag
-        $script:Config.DataCapPeriod   = 'Monthly'
-        $script:alertWarnTriggered     = $false
-        $script:alertExceededTriggered = $false
-        Save-Config
-        Check-DataCapAlert
-        foreach ($sub in $menuCapLimit.Items) {
-            if ($sub -is [System.Windows.Controls.MenuItem] -and $sub.Tag -ne 'custom') {
-                $sub.IsChecked = ([double]$sub.Tag -eq $script:Config.DataCapGB)
-            }
-        }
+        Set-DataCapSetting $s.Tag.Val $s.Tag.Unit
     })
-    $menuCapLimit.Items.Add($itemCo) | Out-Null
+    $menuCapPresetsGB.Items.Add($itemGb) | Out-Null
 }
 
-$itemCustomCap = New-Object System.Windows.Controls.MenuItem
-$itemCustomCap.Header = 'Custom Limit (GB)...'
-$itemCustomCap.Tag    = 'custom'
-$itemCustomCap.Add_Click({ Prompt-SetMonthlyCap })
-$menuCapLimit.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
-$menuCapLimit.Items.Add($itemCustomCap) | Out-Null
+# Megabytes (MB) Presets Submenu
+$menuCapPresetsMB = New-Object System.Windows.Controls.MenuItem
+$menuCapPresetsMB.Header = 'Megabytes (MB) Presets'
+
+$mbOptions = @(
+    @{ Val = 250;  Name = '250 MB' },
+    @{ Val = 500;  Name = '500 MB' },
+    @{ Val = 1000; Name = '1000 MB (~1 GB)' },
+    @{ Val = 2000; Name = '2000 MB (~2 GB)' },
+    @{ Val = 5000; Name = '5000 MB (~5 GB)' }
+)
+
+foreach ($opt in $mbOptions) {
+    $itemMb = New-Object System.Windows.Controls.MenuItem
+    $itemMb.Header = $opt.Name
+    $itemMb.Tag    = @{ Val = [double]$opt.Val; Unit = 'MB' }
+    $itemMb.Add_Click({
+        param($s, $e)
+        Set-DataCapSetting $s.Tag.Val $s.Tag.Unit
+    })
+    $menuCapPresetsMB.Items.Add($itemMb) | Out-Null
+}
+
+# Cap Period Submenu (Monthly vs Daily)
+$menuCapPeriod = New-Object System.Windows.Controls.MenuItem
+$menuCapPeriod.Header = 'Cap Period'
+
+$itemPeriodMonthly = New-Object System.Windows.Controls.MenuItem
+$itemPeriodMonthly.Header = 'Monthly Cap'
+$itemPeriodMonthly.Tag    = 'Monthly'
+$itemPeriodMonthly.Add_Click({
+    $script:Config.DataCapPeriod = 'Monthly'
+    $script:alertWarnTriggered     = $false
+    $script:alertExceededTriggered = $false
+    Save-Config
+    Check-DataCapAlert
+})
+
+$itemPeriodDaily = New-Object System.Windows.Controls.MenuItem
+$itemPeriodDaily.Header = 'Daily Cap'
+$itemPeriodDaily.Tag    = 'Daily'
+$itemPeriodDaily.Add_Click({
+    $script:Config.DataCapPeriod = 'Daily'
+    $script:alertWarnTriggered     = $false
+    $script:alertExceededTriggered = $false
+    Save-Config
+    Check-DataCapAlert
+})
+
+$menuCapPeriod.Items.Add($itemPeriodMonthly) | Out-Null
+$menuCapPeriod.Items.Add($itemPeriodDaily) | Out-Null
 
 # Live usage display items
 $itemUsageMonth = New-Object System.Windows.Controls.MenuItem
@@ -1515,10 +1609,11 @@ $menuDataUsage.Add_SubmenuOpened({
     $arrowDown = [char]0x2193
     $arrowUp   = [char]0x2191
     $tMonth = $script:Config.MonthlyRxBytes + $script:Config.MonthlyTxBytes
-    $capGB  = [double]$script:Config.DataCapGB
-    $capStr = if ($capGB -gt 0) {
-        $pct = ($tMonth / ($capGB * 1GB)) * 100
-        " / {0:N0} GB ({1:N1}%)" -f $capGB, $pct
+    $capBytes = Get-DataCapBytes
+    $capDisplay = Get-DataCapDisplay
+    $capStr = if ($capBytes -gt 0) {
+        $pct = ($tMonth / $capBytes) * 100
+        " / {0} ({1:N1}%)" -f $capDisplay, $pct
     } else {
         " (Cap: Disabled)"
     }
@@ -1529,16 +1624,39 @@ $menuDataUsage.Add_SubmenuOpened({
     $tSess  = $script:sessionRxBytes + $script:sessionTxBytes
     $itemUsageSession.Header = ('Session:    {0}  ({1} {2} / {3} {4})' -f (Format-DataSize $tSess), $arrowDown, (Format-DataSize $script:sessionRxBytes), $arrowUp, (Format-DataSize $script:sessionTxBytes))
 
-    # Refresh checks
-    foreach ($sub in $menuCapLimit.Items) {
-        if ($sub -is [System.Windows.Controls.MenuItem] -and $sub.Tag -ne 'custom') {
-            $sub.IsChecked = ([double]$sub.Tag -eq [double]$script:Config.DataCapGB)
+    # Refresh checks for GB presets
+    $curVal  = if ($script:Config.DataCapValue -gt 0) { [double]$script:Config.DataCapValue } else { [double]$script:Config.DataCapGB }
+    $curUnit = if ($script:Config.DataCapUnit) { $script:Config.DataCapUnit } else { 'GB' }
+    foreach ($sub in $menuCapPresetsGB.Items) {
+        if ($sub -is [System.Windows.Controls.MenuItem] -and $sub.Tag) {
+            $tagVal = [double]$sub.Tag.Val
+            if ($tagVal -eq 0) {
+                $sub.IsChecked = ($curVal -le 0)
+            } else {
+                $sub.IsChecked = ($curUnit -eq 'GB' -and $curVal -eq $tagVal)
+            }
+        }
+    }
+    # Refresh checks for MB presets
+    foreach ($sub in $menuCapPresetsMB.Items) {
+        if ($sub -is [System.Windows.Controls.MenuItem] -and $sub.Tag) {
+            $tagVal = [double]$sub.Tag.Val
+            $sub.IsChecked = ($curUnit -eq 'MB' -and $curVal -eq $tagVal)
+        }
+    }
+    # Refresh checks for Period
+    foreach ($sub in $menuCapPeriod.Items) {
+        if ($sub -is [System.Windows.Controls.MenuItem] -and $sub.Tag) {
+            $sub.IsChecked = ($sub.Tag -eq $script:Config.DataCapPeriod)
         }
     }
 })
 
 $menuDataUsage.Items.Add($itemSetCapSub) | Out-Null
-$menuDataUsage.Items.Add($menuCapLimit) | Out-Null
+$menuDataUsage.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+$menuDataUsage.Items.Add($menuCapPresetsGB) | Out-Null
+$menuDataUsage.Items.Add($menuCapPresetsMB) | Out-Null
+$menuDataUsage.Items.Add($menuCapPeriod) | Out-Null
 $menuDataUsage.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
 $menuDataUsage.Items.Add($itemUsageMonth) | Out-Null
 $menuDataUsage.Items.Add($itemUsageToday) | Out-Null
@@ -1949,13 +2067,13 @@ function Show-CapNotification([string]$title, [string]$msg, [string]$icon = 'War
 }
 
 function Check-DataCapAlert {
-    if ($script:Config.DataCapGB -le 0) {
+    $capBytes = Get-DataCapBytes
+    if ($capBytes -le 0) {
         $script:alertWarnTriggered     = $false
         $script:alertExceededTriggered = $false
         return
     }
 
-    $capBytes = [double]$script:Config.DataCapGB * 1GB
     $usedBytes = if ($script:Config.DataCapPeriod -eq 'Daily') {
         $script:Config.DailyRxBytes + $script:Config.DailyTxBytes
     } else {
@@ -1963,16 +2081,18 @@ function Check-DataCapAlert {
     }
 
     $pct = ($usedBytes / $capBytes) * 100
+    $capDisplay = Get-DataCapDisplay
+    $periodName = if ($script:Config.DataCapPeriod -eq 'Daily') { 'daily' } else { 'monthly' }
 
     if ($pct -ge 100.0 -and -not $script:alertExceededTriggered) {
         $script:alertExceededTriggered = $true
         $script:alertWarnTriggered     = $true
         $usedFmt = Format-DataSize $usedBytes
-        Show-CapNotification "NetSpeedTaskbar - Data Cap Exceeded!" "You have reached 100% of your $($script:Config.DataCapGB) GB monthly data cap ($usedFmt used)." 'Error'
+        Show-CapNotification "NetSpeedTaskbar - Data Cap Exceeded!" "You have reached 100% of your $capDisplay $periodName data cap ($usedFmt used)." 'Error'
     } elseif (($pct -ge 90.0 -or $usedBytes -gt ($capBytes * 0.9)) -and -not $script:alertWarnTriggered) {
         $script:alertWarnTriggered = $true
         $usedFmt = Format-DataSize $usedBytes
-        Show-CapNotification "NetSpeedTaskbar - Data Cap Alarm (90%)" "Warning: You have reached 90% of your $($script:Config.DataCapGB) GB monthly cap ($usedFmt used). Speed display turned RED." 'Warning'
+        Show-CapNotification "NetSpeedTaskbar - Data Cap Alarm (90%)" "Warning: You have reached 90% of your $capDisplay $periodName cap ($usedFmt used). Speed display turned RED." 'Warning'
     }
 }
 
@@ -2143,10 +2263,14 @@ $timer.Add_Tick({
     $valUpInline.Text     = $fmtUp.Val
     $unitUpInline.Text    = $fmtUp.Unit
 
-    # Data Cap Alarm: Change text color to red at 90% if ($monthTotal -gt $cap*0.9)
-    $monthTotal = [double]($script:Config.MonthlyRxBytes + $script:Config.MonthlyTxBytes)
-    $cap = [double]$script:Config.DataCapGB * 1GB
-    $isCapAlarmRed = ($cap -gt 0 -and $monthTotal -gt ($cap * 0.9))
+    # Data Cap Alarm: Change text color to red at 90% if ($usedTotal -gt $cap*0.9)
+    $usedTotal = if ($script:Config.DataCapPeriod -eq 'Daily') {
+        [double]($script:Config.DailyRxBytes + $script:Config.DailyTxBytes)
+    } else {
+        [double]($script:Config.MonthlyRxBytes + $script:Config.MonthlyTxBytes)
+    }
+    $cap = Get-DataCapBytes
+    $isCapAlarmRed = ($cap -gt 0 -and $usedTotal -gt ($cap * 0.9))
 
     if ($isCapAlarmRed) {
         $alarmRedBrush = $brushConverter.ConvertFromString('#FF4365')
@@ -2247,9 +2371,10 @@ $timer.Add_Tick({
 
         # Update Cap Warning / Progress Section & Dot
         if ($tipCapSection) {
-            if ($script:Config.DataCapGB -gt 0) {
+            $capBytes = Get-DataCapBytes
+            if ($capBytes -gt 0) {
                 $tipCapSection.Visibility = [System.Windows.Visibility]::Visible
-                $capBytes = [double]$script:Config.DataCapGB * 1GB
+                $capDisplay = Get-DataCapDisplay
                 $usedBytes = if ($script:Config.DataCapPeriod -eq 'Daily') {
                     $script:Config.DailyRxBytes + $script:Config.DailyTxBytes
                 } else {
@@ -2259,7 +2384,7 @@ $timer.Add_Tick({
                 $barPct = [Math]::Min(100.0, [Math]::Max(0.0, $rawPct))
 
                 if ($tipCapLabel) {
-                    $tipCapLabel.Text = "$($script:Config.DataCapPeriod) Cap ($($script:Config.DataCapGB) GB):"
+                    $tipCapLabel.Text = "$($script:Config.DataCapPeriod) Cap ($capDisplay):"
                 }
                 if ($tipCapPercent) {
                     $tipCapPercent.Text = '{0:N1}%' -f $rawPct
@@ -2276,9 +2401,9 @@ $timer.Add_Tick({
                     if ($tipMonthUsage) { $tipMonthUsage.Foreground = $cRed }
                     if ($tipCapStatus) {
                         if ($usedBytes -ge $capBytes) {
-                            $tipCapStatus.Text = ('[!] DATA CAP EXCEEDED! ({0:N1} GB / {1:N0} GB used)' -f ($usedBytes / 1GB), $script:Config.DataCapGB)
+                            $tipCapStatus.Text = ('[!] DATA CAP EXCEEDED! ({0} / {1} used)' -f (Format-DataSize $usedBytes), $capDisplay)
                         } else {
-                            $tipCapStatus.Text = ('[!] CAP ALARM: >90% reached! ({0:N1} GB / {1:N0} GB used)' -f ($usedBytes / 1GB), $script:Config.DataCapGB)
+                            $tipCapStatus.Text = ('[!] CAP ALARM: >90% reached! ({0} / {1} used)' -f (Format-DataSize $usedBytes), $capDisplay)
                         }
                         $tipCapStatus.Foreground = $cRed
                         $tipCapStatus.Visibility = [System.Windows.Visibility]::Visible
@@ -2293,7 +2418,7 @@ $timer.Add_Tick({
                     if ($tipCapFill)    { $tipCapFill.Background = $cAmber }
                     if ($tipMonthUsage) { $tipMonthUsage.Foreground = $brushConverter.ConvertFromString('#FFFFFF') }
                     if ($tipCapStatus) {
-                        $tipCapStatus.Text = ('[!] Warning: 80% threshold reached ({0:N1} GB used)' -f ($usedBytes / 1GB))
+                        $tipCapStatus.Text = ('[!] Warning: 80% threshold reached ({0} used)' -f (Format-DataSize $usedBytes))
                         $tipCapStatus.Foreground = $cAmber
                         $tipCapStatus.Visibility = [System.Windows.Visibility]::Visible
                     }
