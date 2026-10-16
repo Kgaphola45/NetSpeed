@@ -769,8 +769,20 @@ $container.Add_MouseDown({
 
 # ------------------------------------------------------------------------------
 # 8. Windows 11 Dark Context Menu
-# ------------------------------------------------------------------------------
 $menu = New-Object System.Windows.Controls.ContextMenu
+$menu.Resources = $win.Resources
+$menu.Style     = $win.FindResource([System.Windows.Controls.ContextMenu])
+
+# Auto-dismiss ContextMenu when clicking any leaf MenuItem
+$menu.AddHandler([System.Windows.Controls.MenuItem]::ClickEvent, [System.Windows.RoutedEventHandler]{
+    param($s, $e)
+    if ($e.OriginalSource -is [System.Windows.Controls.MenuItem]) {
+        $mi = [System.Windows.Controls.MenuItem]$e.OriginalSource
+        if (-not $mi.HasItems) {
+            $menu.IsOpen = $false
+        }
+    }
+})
 
 # Lock Position
 $menuLock = New-Object System.Windows.Controls.MenuItem
