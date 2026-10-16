@@ -671,9 +671,6 @@ function Get-CurrentScreen {
 function Snap-ToTaskbar {
     param([System.Windows.Forms.Screen]$targetScreen = $null)
     if (-not $targetScreen) {
-        $targetScreen = Get-CurrentScreen
-    }
-    if (-not $targetScreen) {
         $targetScreen = [System.Windows.Forms.Screen]::PrimaryScreen
     }
 
@@ -688,11 +685,14 @@ function Snap-ToTaskbar {
     }
 
     # Place in taskbar, ~240px from right edge of selected screen (beside clock/tray)
-    $win.Left = [Math]::Max($bounds.Left + 10, ($bounds.Right - $win.Width - 240))
+    $winWidth  = if ($win.ActualWidth -gt 0) { $win.ActualWidth } else { $win.Width }
+    $winHeight = if ($win.ActualHeight -gt 0) { $win.ActualHeight } else { $win.Height }
+
+    $win.Left = [Math]::Max($bounds.Left + 10, ($bounds.Right - $winWidth - 240))
     if ($isAutoHide) {
-        $win.Top = $bounds.Bottom - $win.Height - 4
+        $win.Top = $bounds.Bottom - $winHeight - 4
     } else {
-        $win.Top = $work.Bottom + [Math]::Max(0, ($tbHeight - $win.Height) / 2)
+        $win.Top = $work.Bottom + [Math]::Max(0, ($tbHeight - $winHeight) / 2)
     }
 
     $script:Config.Left = $win.Left
@@ -707,8 +707,10 @@ if ($null -ne $script:Config.Left -and $null -ne $script:Config.Top) {
     try {
         $allScreens = [System.Windows.Forms.Screen]::AllScreens
         foreach ($s in $allScreens) {
-            if ($script:Config.Left -ge $s.Bounds.Left -and $script:Config.Left -lt $s.Bounds.Right -and
-                $script:Config.Top  -ge $s.Bounds.Top  -and $script:Config.Top  -lt $s.Bounds.Bottom) {
+            $midX = [double]$script:Config.Left + 40
+            $midY = [double]$script:Config.Top + 15
+            if ($midX -ge $s.Bounds.Left -and $midX -lt $s.Bounds.Right -and
+                $midY -ge $s.Bounds.Top  -and $midY -lt $s.Bounds.Bottom) {
                 $inBounds = $true
                 break
             }
@@ -716,13 +718,13 @@ if ($null -ne $script:Config.Left -and $null -ne $script:Config.Top) {
     } catch { }
 
     if ($inBounds) {
-        $win.Left = $script:Config.Left
-        $win.Top  = $script:Config.Top
+        $win.Left = [double]$script:Config.Left
+        $win.Top  = [double]$script:Config.Top
     } else {
-        Snap-ToTaskbar
+        Snap-ToTaskbar ([System.Windows.Forms.Screen]::PrimaryScreen)
     }
 } else {
-    Snap-ToTaskbar
+    Snap-ToTaskbar ([System.Windows.Forms.Screen]::PrimaryScreen)
 }
 
 # ------------------------------------------------------------------------------
