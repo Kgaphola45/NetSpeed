@@ -444,9 +444,13 @@ $unitUpInline    = $win.FindName('UnitUpInline')
 $tipAdapterName  = $win.FindName('TipAdapterName')
 $tipPingDot      = $win.FindName('TipPingDot')
 $tipPingText     = $win.FindName('TipPingText')
+$tipIpGateway    = $win.FindName('TipIpGateway')
+$tipLiveSpeed    = $win.FindName('TipLiveSpeed')
 $tipSessionDown  = $win.FindName('TipSessionDown')
 $tipSessionUp    = $win.FindName('TipSessionUp')
-$tipLiveSpeed    = $win.FindName('TipLiveSpeed')
+$tipGraphDown    = $win.FindName('TipGraphDown')
+$tipGraphUp      = $win.FindName('TipGraphUp')
+$tipGraphPeak    = $win.FindName('TipGraphPeak')
 
 # ------------------------------------------------------------------------------
 # 5. UI Setup & Themes Application
