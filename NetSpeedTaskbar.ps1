@@ -621,6 +621,65 @@ function Update-AdapterMenu {
 Update-AdapterMenu
 $menu.Items.Add($menuAdapter) | Out-Null
 
+# Speed Unit Submenu (Bits vs Bytes)
+$menuUnit = New-Object System.Windows.Controls.MenuItem
+$menuUnit.Header = 'Speed Unit'
+
+$unitBytesItem = New-Object System.Windows.Controls.MenuItem
+$unitBytesItem.Header = 'Bytes/s (KB/s, MB/s)'
+$unitBytesItem.IsChecked = ($script:Config.SpeedUnit -ne 'Bits')
+
+$unitBitsItem = New-Object System.Windows.Controls.MenuItem
+$unitBitsItem.Header = 'Bits/s (Kbps, Mbps)'
+$unitBitsItem.IsChecked = ($script:Config.SpeedUnit -eq 'Bits')
+
+$unitBytesItem.Add_Click({
+    $script:Config.SpeedUnit = 'Bytes'
+    $unitBytesItem.IsChecked = $true
+    $unitBitsItem.IsChecked  = $false
+    Save-Config
+})
+$unitBitsItem.Add_Click({
+    $script:Config.SpeedUnit = 'Bits'
+    $unitBytesItem.IsChecked = $false
+    $unitBitsItem.IsChecked  = $true
+    Save-Config
+})
+$menuUnit.Items.Add($unitBytesItem) | Out-Null
+$menuUnit.Items.Add($unitBitsItem) | Out-Null
+$menu.Items.Add($menuUnit) | Out-Null
+
+# Session Data Submenu
+$menuSession = New-Object System.Windows.Controls.MenuItem
+$menuSession.Header = 'Session Data'
+
+$itemSessionDown = New-Object System.Windows.Controls.MenuItem
+$itemSessionDown.Header = 'Downloaded: 0 B'
+$itemSessionDown.IsEnabled = $false
+
+$itemSessionUp = New-Object System.Windows.Controls.MenuItem
+$itemSessionUp.Header = 'Uploaded: 0 B'
+$itemSessionUp.IsEnabled = $false
+
+$itemSessionReset = New-Object System.Windows.Controls.MenuItem
+$itemSessionReset.Header = 'Reset Session Counters'
+$itemSessionReset.Add_Click({
+    $script:sessionRxBytes = 0L
+    $script:sessionTxBytes = 0L
+})
+
+# Dynamic update on context menu opening
+$menuSession.Add_SubmenuOpened({
+    $itemSessionDown.Header = "Downloaded: $(Format-DataSize $script:sessionRxBytes)"
+    $itemSessionUp.Header   = "Uploaded:   $(Format-DataSize $script:sessionTxBytes)"
+})
+
+$menuSession.Items.Add($itemSessionDown) | Out-Null
+$menuSession.Items.Add($itemSessionUp) | Out-Null
+$menuSession.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+$menuSession.Items.Add($itemSessionReset) | Out-Null
+$menu.Items.Add($menuSession) | Out-Null
+
 # Color Scheme Submenu
 $menuThemes = New-Object System.Windows.Controls.MenuItem
 $menuThemes.Header = 'Color Scheme'
