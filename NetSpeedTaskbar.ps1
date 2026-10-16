@@ -264,9 +264,9 @@ $xaml = @"
         
         <Border.ToolTip>
             <ToolTip Name="WidgetToolTip">
-                <StackPanel Width="195">
+                <StackPanel Width="210">
                     <!-- Header: Active Adapter & Ping Latency -->
-                    <Grid Margin="0,0,0,6">
+                    <Grid Margin="0,0,0,5">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
@@ -278,7 +278,27 @@ $xaml = @"
                         </StackPanel>
                     </Grid>
 
-                    <Rectangle Height="1" Fill="#20FFFFFF" Margin="0,0,0,6"/>
+                    <!-- IP and Gateway Info -->
+                    <Grid Margin="0,0,0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="IP / Gateway:" FontSize="10" Foreground="#8FA3B8"/>
+                        <TextBlock Name="TipIpGateway" Grid.Column="1" HorizontalAlignment="Right" Text="-- / --" FontSize="10" Foreground="#D0E0F0"/>
+                    </Grid>
+
+                    <Rectangle Height="1" Fill="#20FFFFFF" Margin="0,0,0,5"/>
+
+                    <!-- Live Combined Speed -->
+                    <Grid Margin="0,1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Live Speed:" FontSize="10" Foreground="#8FA3B8"/>
+                        <TextBlock Name="TipLiveSpeed" Grid.Column="1" HorizontalAlignment="Right" Text="-- KB/s" FontSize="10" Foreground="#D0E0F0"/>
+                    </Grid>
 
                     <!-- Session Data: Download -->
                     <Grid Margin="0,1">
@@ -286,7 +306,7 @@ $xaml = @"
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Session Download:" FontSize="10" Foreground="#8FA3B8"/>
+                        <TextBlock Text="Session Down:" FontSize="10" Foreground="#8FA3B8"/>
                         <TextBlock Name="TipSessionDown" Grid.Column="1" HorizontalAlignment="Right" Text="0 B" FontSize="10" FontWeight="SemiBold" Foreground="#38E1B0"/>
                     </Grid>
 
@@ -300,14 +320,23 @@ $xaml = @"
                         <TextBlock Name="TipSessionUp" Grid.Column="1" HorizontalAlignment="Right" Text="0 B" FontSize="10" FontWeight="SemiBold" Foreground="#FFA447"/>
                     </Grid>
 
-                    <!-- Live Speed Summary -->
-                    <Grid Margin="0,3,0,0">
+                    <Rectangle Height="1" Fill="#20FFFFFF" Margin="0,4,0,4"/>
+
+                    <!-- Real-Time Sparkline Speed Graph (30s) -->
+                    <Grid Height="34" Margin="0,1">
+                        <Border Background="#12FFFFFF" CornerRadius="4" BorderBrush="#16FFFFFF" BorderThickness="1"/>
+                        <Canvas Name="TipGraphCanvas" Width="210" Height="34" ClipToBounds="True">
+                            <Polyline Name="TipGraphDown" Stroke="#38E1B0" StrokeThickness="1.5"/>
+                            <Polyline Name="TipGraphUp" Stroke="#FFA447" StrokeThickness="1.5"/>
+                        </Canvas>
+                    </Grid>
+                    <Grid Margin="0,1,0,0">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Live Speed:" FontSize="10" Foreground="#8FA3B8"/>
-                        <TextBlock Name="TipLiveSpeed" Grid.Column="1" HorizontalAlignment="Right" Text="↓ 0.0 KB/s  ↑ 0.0 KB/s" FontSize="10" Foreground="#D0E0F0"/>
+                        <TextBlock Text="History (30s)" FontSize="9" Foreground="#6C7F94"/>
+                        <TextBlock Name="TipGraphPeak" Grid.Column="1" Text="Peak: 0 KB/s" FontSize="9" Foreground="#6C7F94"/>
                     </Grid>
                 </StackPanel>
             </ToolTip>
