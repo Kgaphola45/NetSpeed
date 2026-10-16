@@ -113,6 +113,7 @@ $defaultConfig = @{
     IntervalMs         = 1000              # 500, 1000, 2000
     Adapter            = 'Auto'            # Auto, All, or Specific Adapter Name
     SpeedUnit          = 'Bytes'           # Bytes, Bits
+    PingTarget         = 'Gateway'         # Gateway (0 MB, free), 8.8.8.8, 1.1.1.1, Off, or custom IP
     DoubleClickAction  = 'TaskMgr'         # TaskMgr, Snap, NetworkSettings, Connections
     MiddleClickAction  = 'NetworkSettings' # TaskMgr, Snap, NetworkSettings, Connections
     Opacity            = 1.0               # 1.0, 0.85, 0.70, 0.50
@@ -1220,6 +1221,73 @@ $menuUnit.Items.Add($unitBytesItem) | Out-Null
 $menuUnit.Items.Add($unitBitsItem) | Out-Null
 $menu.Items.Add($menuUnit) | Out-Null
 
+# Ping / Latency Target Submenu
+$menuPing = New-Object System.Windows.Controls.MenuItem
+$menuPing.Header = 'Ping / Latency Target'
+
+$pingTargets = @(
+    @{ Id = 'Gateway'; Name = 'Local Router / Gateway (0 MB Internet - Free)' },
+    @{ Id = '8.8.8.8'; Name = 'Google DNS (8.8.8.8)' },
+    @{ Id = '1.1.1.1'; Name = 'Cloudflare DNS (1.1.1.1)' },
+    @{ Id = 'Off';     Name = 'Disabled (Save Battery & Data)' }
+)
+
+function Update-PingMenuChecks {
+    $cur = if ($script:Config.PingTarget) { $script:Config.PingTarget } else { 'Gateway' }
+    foreach ($item in $menuPing.Items) {
+        if ($item -is [System.Windows.Controls.MenuItem]) {
+            if ($item.Tag -eq 'Custom') {
+                $item.IsChecked = ($cur -notin 'Gateway', '8.8.8.8', '1.1.1.1', 'Off')
+            } else {
+                $item.IsChecked = ($item.Tag -eq $cur)
+            }
+        }
+    }
+}
+
+foreach ($pt in $pingTargets) {
+    $itemPt = New-Object System.Windows.Controls.MenuItem
+    $itemPt.Header = $pt.Name
+    $itemPt.Tag    = $pt.Id
+    $itemPt.IsChecked = (($script:Config.PingTarget -eq $pt.Id) -or (-not $script:Config.PingTarget -and $pt.Id -eq 'Gateway'))
+    $itemPt.Add_Click({
+        param($s, $e)
+        $script:Config.PingTarget = $s.Tag
+        $script:currentPing = $null
+        Save-Config
+        Update-PingMenuChecks
+    })
+    $menuPing.Items.Add($itemPt) | Out-Null
+}
+
+$itemPingCustom = New-Object System.Windows.Controls.MenuItem
+$itemPingCustom.Header = 'Custom IP / Host...'
+$itemPingCustom.Tag    = 'Custom'
+$itemPingCustom.Add_Click({
+    try {
+        $curVal = if ($script:Config.PingTarget -notin 'Gateway', '8.8.8.8', '1.1.1.1', 'Off') { $script:Config.PingTarget } else { '8.8.4.4' }
+        $inputVal = [Microsoft.VisualBasic.Interaction]::InputBox(
+            "Enter target IP address or hostname to ping:`n(e.g. 192.168.1.1, 8.8.8.8, 1.1.1.1, or router IP)",
+            "NetSpeedTaskbar - Set Ping Target",
+            $curVal.ToString()
+        )
+        if (-not [string]::IsNullOrWhiteSpace($inputVal)) {
+            $script:Config.PingTarget = $inputVal.Trim()
+            $script:currentPing = $null
+            Save-Config
+            Update-PingMenuChecks
+        }
+    } catch { }
+})
+$menuPing.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+$menuPing.Items.Add($itemPingCustom) | Out-Null
+
+$menuPing.Add_SubmenuOpened({
+    Update-PingMenuChecks
+})
+
+$menu.Items.Add($menuPing) | Out-Null
+
 # Top Consumers Submenu (Which app is using bandwidth)
 $menuTopConsumers = New-Object System.Windows.Controls.MenuItem
 $menuTopConsumers.Header = 'Top Consumers (last 10s)'
@@ -1952,6 +2020,32 @@ function Update-DataUsage([long]$deltaRx, [long]$deltaTx) {
 $script:pingObj        = [System.Net.NetworkInformation.Ping]::new()
 $script:pingTask       = $null
 $script:currentPing    = $null
+$script:currentGateway = $null
+
+function Get-ActivePingTarget {
+    $target = if ($script:Config.PingTarget) { $script:Config.PingTarget } else { 'Gateway' }
+    if ($target -eq 'Off' -or $target -eq 'Disabled') {
+        return $null
+    }
+    if ($target -eq 'Gateway') {
+        if ($script:currentGateway -and $script:currentGateway -ne '--') {
+            return $script:currentGateway
+        }
+        try {
+            $activeIfaces = Get-TargetInterfaces
+            if ($activeIfaces.Count -gt 0) {
+                $g = $activeIfaces[0].GetIPProperties().GatewayAddresses | 
+                    Where-Object { $_.Address.ToString() -ne '0.0.0.0' -and $_.Address.ToString() -ne '::' }
+                if ($g) {
+                    $script:currentGateway = $g[0].Address.ToString()
+                    return $script:currentGateway
+                }
+            }
+        } catch { }
+        return $null
+    }
+    return $target
+}
 
 $script:cachedSsid     = $null
 $script:lastSsidCheck  = [DateTime]::MinValue
@@ -2089,22 +2183,31 @@ $timer.Add_Tick({
                 Set-ThemeColors 'Auto'
             }
         }
-        if ($null -eq $script:pingTask -or $script:pingTask.IsCompleted) {
-            if ($null -ne $script:pingTask -and $script:pingTask.IsCompleted -and -not $script:pingTask.IsFaulted) {
-                try {
-                    $reply = $script:pingTask.Result
-                    if ($reply.Status -eq [System.Net.NetworkInformation.IPStatus]::Success) {
-                        $script:currentPing = [int]$reply.RoundtripTime
-                    } else {
+        $targetIp = Get-ActivePingTarget
+        if ($targetIp) {
+            if ($null -eq $script:pingTask -or $script:pingTask.IsCompleted) {
+                if ($null -ne $script:pingTask -and $script:pingTask.IsCompleted -and -not $script:pingTask.IsFaulted) {
+                    try {
+                        $reply = $script:pingTask.Result
+                        if ($reply.Status -eq [System.Net.NetworkInformation.IPStatus]::Success) {
+                            $script:currentPing = [int]$reply.RoundtripTime
+                        } else {
+                            $script:currentPing = -1
+                        }
+                    } catch {
                         $script:currentPing = -1
                     }
-                } catch {
-                    $script:currentPing = -1
                 }
+                try {
+                    $script:pingTask = $script:pingObj.SendPingAsync($targetIp, 800)
+                } catch { }
             }
-            try {
-                $script:pingTask = $script:pingObj.SendPingAsync('1.1.1.1', 800)
-            } catch { }
+        } else {
+            if ($script:Config.PingTarget -eq 'Off' -or $script:Config.PingTarget -eq 'Disabled') {
+                $script:currentPing = -2
+            } else {
+                $script:currentPing = -1
+            }
         }
     }
 
@@ -2213,14 +2316,24 @@ $timer.Add_Tick({
             }
         }
 
-        if ($null -eq $script:currentPing) {
+        if ($script:Config.PingTarget -eq 'Off' -or $script:Config.PingTarget -eq 'Disabled') {
+            $tipPingText.Text = 'Off'
+            $tipPingDot.Fill  = $brushConverter.ConvertFromString('#555555')
+        } elseif ($null -eq $script:currentPing) {
             $tipPingText.Text = 'Checking...'
             $tipPingDot.Fill  = $brushConverter.ConvertFromString('#808080')
+        } elseif ($script:currentPing -eq -2) {
+            $tipPingText.Text = 'Off'
+            $tipPingDot.Fill  = $brushConverter.ConvertFromString('#555555')
         } elseif ($script:currentPing -lt 0) {
             $tipPingText.Text = 'Offline'
             $tipPingDot.Fill  = $brushConverter.ConvertFromString('#FF4D4D')
         } else {
-            $tipPingText.Text = "$($script:currentPing) ms"
+            $targetLabel = if ($script:Config.PingTarget -eq 'Gateway' -or -not $script:Config.PingTarget) { ' (Router)' }
+                           elseif ($script:Config.PingTarget -eq '8.8.8.8') { ' (Google)' }
+                           elseif ($script:Config.PingTarget -eq '1.1.1.1') { ' (Cloudflare)' }
+                           else { '' }
+            $tipPingText.Text = "$($script:currentPing) ms$targetLabel"
             if ($script:currentPing -lt 80) {
                 $tipPingDot.Fill = $brushConverter.ConvertFromString('#38E1B0')
             } elseif ($script:currentPing -lt 150) {
@@ -2253,6 +2366,7 @@ $timer.Add_Tick({
                 $g = $iface.GetIPProperties().GatewayAddresses | 
                     Where-Object { $_.Address.ToString() -ne '0.0.0.0' -and $_.Address.ToString() -ne '::' }
                 $gwStr = if ($g) { $g[0].Address.ToString() } else { '--' }
+                if ($gwStr -ne '--') { $script:currentGateway = $gwStr }
 
                 if ($tipIpGateway) {
                     $tipIpGateway.Text = "$ipStr / $gwStr"
