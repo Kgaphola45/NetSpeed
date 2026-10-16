@@ -221,6 +221,33 @@ $xaml = @"
             <Setter Property="Margin" Value="6,4"/>
             <Setter Property="Height" Value="1"/>
         </Style>
+
+        <!-- Windows 11 Fluent Dark ToolTip Style -->
+        <Style TargetType="ToolTip">
+            <Setter Property="Background" Value="#F0181818"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToolTip">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="12" Direction="270" ShadowDepth="4" Color="#000000" Opacity="0.6"/>
+                            </Border.Effect>
+                            <ContentPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <!-- Outer Interactive Border (Transparent, subtle rounded hover pill) -->
@@ -229,8 +256,61 @@ $xaml = @"
             CornerRadius="6"
             Padding="6,2"
             Cursor="Hand"
-            SnapsToDevicePixels="True">
+            SnapsToDevicePixels="True"
+            ToolTipService.InitialShowDelay="150"
+            ToolTipService.ShowDuration="30000">
         
+        <Border.ToolTip>
+            <ToolTip Name="WidgetToolTip">
+                <StackPanel Width="195">
+                    <!-- Header: Active Adapter & Ping Latency -->
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Name="TipAdapterName" Grid.Column="0" Text="Checking..." FontWeight="SemiBold" FontSize="11" Foreground="#FFFFFF" TextTrimming="CharacterEllipsis"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Name="TipPingDot" Width="6" Height="6" Fill="#808080" Margin="0,1,4,0"/>
+                            <TextBlock Name="TipPingText" Text="-- ms" FontSize="10" Foreground="#A0B4C8"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Rectangle Height="1" Fill="#20FFFFFF" Margin="0,0,0,6"/>
+
+                    <!-- Session Data: Download -->
+                    <Grid Margin="0,1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Session Download:" FontSize="10" Foreground="#8FA3B8"/>
+                        <TextBlock Name="TipSessionDown" Grid.Column="1" HorizontalAlignment="Right" Text="0 B" FontSize="10" FontWeight="SemiBold" Foreground="#38E1B0"/>
+                    </Grid>
+
+                    <!-- Session Data: Upload -->
+                    <Grid Margin="0,1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Session Upload:" FontSize="10" Foreground="#8FA3B8"/>
+                        <TextBlock Name="TipSessionUp" Grid.Column="1" HorizontalAlignment="Right" Text="0 B" FontSize="10" FontWeight="SemiBold" Foreground="#FFA447"/>
+                    </Grid>
+
+                    <!-- Live Speed Summary -->
+                    <Grid Margin="0,3,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Live Speed:" FontSize="10" Foreground="#8FA3B8"/>
+                        <TextBlock Name="TipLiveSpeed" Grid.Column="1" HorizontalAlignment="Right" Text="↓ 0.0 KB/s  ↑ 0.0 KB/s" FontSize="10" Foreground="#D0E0F0"/>
+                    </Grid>
+                </StackPanel>
+            </ToolTip>
+        </Border.ToolTip>
+
         <Border.Effect>
             <!-- DropShadow ensures 100% legibility on light/dark taskbars & wallpapers -->
             <DropShadowEffect BlurRadius="4" ShadowDepth="1" Direction="315" Color="#000000" Opacity="0.8"/>
