@@ -2049,6 +2049,30 @@ $timer.Add_Tick({
     $valUpInline.Text     = $fmtUp.Val
     $unitUpInline.Text    = $fmtUp.Unit
 
+    # Data Cap Alarm: Change text color to red at 90% if ($monthTotal -gt $cap*0.9)
+    $monthTotal = [double]($script:Config.MonthlyRxBytes + $script:Config.MonthlyTxBytes)
+    $cap = [double]$script:Config.DataCapGB * 1GB
+    $isCapAlarmRed = ($cap -gt 0 -and $monthTotal -gt ($cap * 0.9))
+
+    if ($isCapAlarmRed) {
+        $alarmRedBrush = $brushConverter.ConvertFromString('#FF4365')
+        $valDownStacked.Foreground = $alarmRedBrush
+        $valUpStacked.Foreground   = $alarmRedBrush
+        $valDownInline.Foreground  = $alarmRedBrush
+        $valUpInline.Foreground    = $alarmRedBrush
+    } else {
+        $effTheme = $script:Config.Theme
+        if ($effTheme -eq 'Auto') {
+            $effTheme = if (Get-TaskbarIsLight) { 'FluentLight' } else { 'Fluent' }
+        }
+        if (-not $Themes.ContainsKey($effTheme)) { $effTheme = 'Fluent' }
+        $normalValBrush = $brushConverter.ConvertFromString($Themes[$effTheme].ValColor)
+        $valDownStacked.Foreground = $normalValBrush
+        $valUpStacked.Foreground   = $normalValBrush
+        $valDownInline.Foreground  = $normalValBrush
+        $valUpInline.Foreground    = $normalValBrush
+    }
+
     # Update 30-Second Sparkline History
     Update-Sparkline $dRx $dTx
 
@@ -2141,12 +2165,18 @@ $timer.Add_Tick({
                     $tipCapFill.Width = [Math]::Max(2.0, ($barPct / 100.0) * 210.0)
                 }
 
-                if ($rawPct -ge 100.0) {
+                if ($usedBytes -gt ($capBytes * 0.9) -or $rawPct -ge 90.0) {
+                    # RED ALARM at >90% ($monthTotal -gt $cap*0.9)
                     $cRed = $brushConverter.ConvertFromString('#FF4365')
                     if ($tipCapPercent) { $tipCapPercent.Foreground = $cRed }
                     if ($tipCapFill)    { $tipCapFill.Background = $cRed }
+                    if ($tipMonthUsage) { $tipMonthUsage.Foreground = $cRed }
                     if ($tipCapStatus) {
-                        $tipCapStatus.Text = ('[!] Data cap exceeded! ({0:N1} GB used)' -f ($usedBytes / 1GB))
+                        if ($usedBytes -ge $capBytes) {
+                            $tipCapStatus.Text = ('[!] DATA CAP EXCEEDED! ({0:N1} GB / {1:N0} GB used)' -f ($usedBytes / 1GB), $script:Config.DataCapGB)
+                        } else {
+                            $tipCapStatus.Text = ('[!] CAP ALARM: >90% reached! ({0:N1} GB / {1:N0} GB used)' -f ($usedBytes / 1GB), $script:Config.DataCapGB)
+                        }
                         $tipCapStatus.Foreground = $cRed
                         $tipCapStatus.Visibility = [System.Windows.Visibility]::Visible
                     }
@@ -2154,12 +2184,13 @@ $timer.Add_Tick({
                         $capWarningDot.Fill = $cRed
                         $capWarningDot.Visibility = [System.Windows.Visibility]::Visible
                     }
-                } elseif ($rawPct -ge $script:Config.CapWarnPercent) {
+                } elseif ($rawPct -ge 80.0) {
                     $cAmber = $brushConverter.ConvertFromString('#FFA447')
                     if ($tipCapPercent) { $tipCapPercent.Foreground = $cAmber }
                     if ($tipCapFill)    { $tipCapFill.Background = $cAmber }
+                    if ($tipMonthUsage) { $tipMonthUsage.Foreground = $brushConverter.ConvertFromString('#FFFFFF') }
                     if ($tipCapStatus) {
-                        $tipCapStatus.Text = ('[!] Warning: {0:N0}% alert threshold reached ({1:N1} GB used)' -f $script:Config.CapWarnPercent, ($usedBytes / 1GB))
+                        $tipCapStatus.Text = ('[!] Warning: 80% threshold reached ({0:N1} GB used)' -f ($usedBytes / 1GB))
                         $tipCapStatus.Foreground = $cAmber
                         $tipCapStatus.Visibility = [System.Windows.Visibility]::Visible
                     }
@@ -2171,12 +2202,14 @@ $timer.Add_Tick({
                     $cMint = $brushConverter.ConvertFromString('#38E1B0')
                     if ($tipCapPercent) { $tipCapPercent.Foreground = $cMint }
                     if ($tipCapFill)    { $tipCapFill.Background = $cMint }
+                    if ($tipMonthUsage) { $tipMonthUsage.Foreground = $brushConverter.ConvertFromString('#FFFFFF') }
                     if ($tipCapStatus)  { $tipCapStatus.Visibility = [System.Windows.Visibility]::Collapsed }
                     if ($capWarningDot) { $capWarningDot.Visibility = [System.Windows.Visibility]::Collapsed }
                 }
             } else {
                 $tipCapSection.Visibility = [System.Windows.Visibility]::Collapsed
                 if ($capWarningDot) { $capWarningDot.Visibility = [System.Windows.Visibility]::Collapsed }
+                if ($tipMonthUsage) { $tipMonthUsage.Foreground = $brushConverter.ConvertFromString('#FFFFFF') }
             }
         }
 
