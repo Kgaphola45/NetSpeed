@@ -410,6 +410,13 @@ $unitDownInline  = $win.FindName('UnitDownInline')
 $valUpInline     = $win.FindName('ValUpInline')
 $unitUpInline    = $win.FindName('UnitUpInline')
 
+$tipAdapterName  = $win.FindName('TipAdapterName')
+$tipPingDot      = $win.FindName('TipPingDot')
+$tipPingText     = $win.FindName('TipPingText')
+$tipSessionDown  = $win.FindName('TipSessionDown')
+$tipSessionUp    = $win.FindName('TipSessionUp')
+$tipLiveSpeed    = $win.FindName('TipLiveSpeed')
+
 # ------------------------------------------------------------------------------
 # 5. UI Setup & Themes Application
 # ------------------------------------------------------------------------------
@@ -446,7 +453,7 @@ function Set-LayoutMode {
     if ($mode -eq 'Inline') {
         $stackedLayout.Visibility = [System.Windows.Visibility]::Collapsed
         $inlineLayout.Visibility  = [System.Windows.Visibility]::Visible
-        $win.Width  = 168
+        $win.Width  = 180
         $win.Height = 28
         $script:Config.Layout = 'Inline'
     } else {
