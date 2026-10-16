@@ -1309,10 +1309,12 @@ $menuThemes = New-Object System.Windows.Controls.MenuItem
 $menuThemes.Header = 'Color Scheme'
 
 $themeItems = @(
-    @{ Id = 'Fluent';     Name = 'Windows 11 Fluent (Mint & Amber)' },
-    @{ Id = 'BluePurple'; Name = 'Ocean (Fluent Blue & Purple)' },
-    @{ Id = 'White';      Name = 'Clean Monochrome (White & Silver)' },
-    @{ Id = 'Cyber';      Name = 'Cyber Neon (Mint & Pink)' }
+    @{ Id = 'Auto';        Name = 'Auto (Matches Windows Taskbar)' },
+    @{ Id = 'Fluent';      Name = 'Windows 11 Fluent (Dark - Mint & Amber)' },
+    @{ Id = 'FluentLight'; Name = 'Windows 11 Light (Dark Text & Emerald)' },
+    @{ Id = 'BluePurple';  Name = 'Ocean (Fluent Blue & Purple)' },
+    @{ Id = 'White';       Name = 'Clean Monochrome (White & Silver)' },
+    @{ Id = 'Cyber';       Name = 'Cyber Neon (Mint & Pink)' }
 )
 foreach ($ti in $themeItems) {
     $item = New-Object System.Windows.Controls.MenuItem
@@ -1476,7 +1478,7 @@ $menuReset.Add_Click({
         $script:sessionTxBytes = 0L
         $script:historyDown.Clear()
         $script:historyUp.Clear()
-        Apply-Theme 'Fluent'
+        Set-ThemeColors 'Auto'
         Set-Layout 'Stacked'
         Set-WidgetOpacity 1.0
         Set-FontSizePreset 'Standard'
@@ -1868,9 +1870,16 @@ $timer.Add_Tick({
     # Update 30-Second Sparkline History
     Update-Sparkline $dRx $dTx
 
-    # Asynchronous Non-Blocking Ping (every ~2 seconds)
+    # Asynchronous Non-Blocking Ping & Auto-Theme Taskbar Check (every ~2 seconds)
     $script:tickCounter++
     if ($script:tickCounter % 2 -eq 0) {
+        if ($script:Config.Theme -eq 'Auto') {
+            $curLight = Get-TaskbarIsLight
+            if ($curLight -ne $script:lastTaskbarIsLight) {
+                $script:lastTaskbarIsLight = $curLight
+                Set-ThemeColors 'Auto'
+            }
+        }
         if ($null -eq $script:pingTask -or $script:pingTask.IsCompleted) {
             if ($null -ne $script:pingTask -and $script:pingTask.IsCompleted -and -not $script:pingTask.IsFaulted) {
                 try {
