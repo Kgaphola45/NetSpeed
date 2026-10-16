@@ -517,18 +517,45 @@ $container.Add_MouseLeave({
 # ------------------------------------------------------------------------------
 # 6. Windows 11 Taskbar Snapping & Positioning
 # ------------------------------------------------------------------------------
-function Snap-ToTaskbar {
-    $primaryW   = [System.Windows.SystemParameters]::PrimaryScreenWidth
-    $primaryH   = [System.Windows.SystemParameters]::PrimaryScreenHeight
-    $workBottom = [System.Windows.SystemParameters]::WorkArea.Bottom
-    
-    $tbHeight = $primaryH - $workBottom
-    if ($tbHeight -lt 30) { $tbHeight = 48 } # standard Windows 11 taskbar height
+# ------------------------------------------------------------------------------
+# 6. Windows 11 Taskbar Snapping & Multi-Monitor / Auto-Hide Support
+# ------------------------------------------------------------------------------
+function Get-CurrentScreen {
+    try {
+        $pt = New-Object System.Drawing.Point([int]($win.Left + ($win.Width / 2)), [int]($win.Top + ($win.Height / 2)))
+        return [System.Windows.Forms.Screen]::FromPoint($pt)
+    } catch {
+        return [System.Windows.Forms.Screen]::PrimaryScreen
+    }
+}
 
-    # Place in taskbar, ~240px from right screen edge (beside system tray/clock)
-    $win.Left = [Math]::Max(10, $primaryW - $win.Width - 240)
-    $win.Top  = $workBottom + [Math]::Max(0, ($tbHeight - $win.Height) / 2)
-    
+function Snap-ToTaskbar {
+    param([System.Windows.Forms.Screen]$targetScreen = $null)
+    if (-not $targetScreen) {
+        $targetScreen = Get-CurrentScreen
+    }
+    if (-not $targetScreen) {
+        $targetScreen = [System.Windows.Forms.Screen]::PrimaryScreen
+    }
+
+    $bounds = $targetScreen.Bounds
+    $work   = $targetScreen.WorkingArea
+
+    # Detect Auto-Hide Taskbar (work area height == screen height)
+    $tbHeight = $bounds.Bottom - $work.Bottom
+    $isAutoHide = ($tbHeight -lt 10)
+    if ($isAutoHide) {
+        $tbHeight = 48 # Standard Windows 11 taskbar height
+    }
+
+    # Place in taskbar, ~240px from right edge of selected screen (beside clock/tray)
+    $win.Left = [Math]::Max($bounds.Left + 10, ($bounds.Right - $win.Width - 240))
+    if ($isAutoHide) {
+        $win.Top = $bounds.Bottom - $win.Height - 4
+    } else {
+        $win.Top = $work.Bottom + [Math]::Max(0, ($tbHeight - $win.Height) / 2)
+    }
+
     $script:Config.Left = $win.Left
     $script:Config.Top  = $win.Top
     Save-Config
@@ -536,11 +563,20 @@ function Snap-ToTaskbar {
 
 # Restore saved position or snap to taskbar
 if ($null -ne $script:Config.Left -and $null -ne $script:Config.Top) {
-    # Validate within screen bounds
-    $maxW = [System.Windows.SystemParameters]::VirtualScreenWidth
-    $maxH = [System.Windows.SystemParameters]::VirtualScreenHeight
-    if ($script:Config.Left -ge 0 -and $script:Config.Left -lt $maxW -and
-        $script:Config.Top  -ge 0 -and $script:Config.Top  -lt $maxH) {
+    # Validate whether saved coordinate is within any active monitor's bounds
+    $inBounds = $false
+    try {
+        $allScreens = [System.Windows.Forms.Screen]::AllScreens
+        foreach ($s in $allScreens) {
+            if ($script:Config.Left -ge $s.Bounds.Left -and $script:Config.Left -lt $s.Bounds.Right -and
+                $script:Config.Top  -ge $s.Bounds.Top  -and $script:Config.Top  -lt $s.Bounds.Bottom) {
+                $inBounds = $true
+                break
+            }
+        }
+    } catch { }
+
+    if ($inBounds) {
         $win.Left = $script:Config.Left
         $win.Top  = $script:Config.Top
     } else {
@@ -551,12 +587,29 @@ if ($null -ne $script:Config.Left -and $null -ne $script:Config.Top) {
 }
 
 # ------------------------------------------------------------------------------
-# 7. Drag & Drop Repositioning & Double-Click Snap
+# 7. Drag & Drop Repositioning & Configurable Click Actions
 # ------------------------------------------------------------------------------
+function Invoke-ClickAction([string]$action) {
+    switch ($action) {
+        'TaskMgr' {
+            try { Start-Process taskmgr.exe } catch { }
+        }
+        'NetworkSettings' {
+            try { Start-Process 'ms-settings:network' } catch { }
+        }
+        'Connections' {
+            try { Start-Process ncpa.cpl } catch { }
+        }
+        'Snap' {
+            Snap-ToTaskbar
+        }
+    }
+}
+
 $container.Add_MouseLeftButtonDown({
     param($s, $e)
     if ($e.ClickCount -ge 2) {
-        Snap-ToTaskbar
+        Invoke-ClickAction $script:Config.DoubleClickAction
         return
     }
     if (-not $script:Config.Locked) {
@@ -566,6 +619,13 @@ $container.Add_MouseLeftButtonDown({
             $script:Config.Top  = $win.Top
             Save-Config
         } catch { }
+    }
+})
+
+$container.Add_MouseDown({
+    param($s, $e)
+    if ($e.ChangedButton -eq [System.Windows.Input.MouseButton]::Middle) {
+        Invoke-ClickAction $script:Config.MiddleClickAction
     }
 })
 
