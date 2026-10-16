@@ -9,11 +9,23 @@
     - Draggable, position persistence, Windows 11 dark context menu, auto-start option
 #>
 
+# Resolve reliable script paths
+$script:ScriptPath = $PSCommandPath
+if (-not $script:ScriptPath) { $script:ScriptPath = $MyInvocation.MyCommand.Path }
+if (-not $script:ScriptPath) { $script:ScriptPath = Join-Path (Get-Location).Path 'NetSpeedTaskbar.ps1' }
+$script:ScriptDir = Split-Path -Parent $script:ScriptPath
+
 # Ensure Single-Threaded Apartment (STA) for WPF
 if ([System.Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') {
-    $script = $MyInvocation.MyCommand.Path
-    if (-not $script) { $script = $PSCommandPath }
-    Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Sta -File `"$script`""
+    Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Sta -File `"$($script:ScriptPath)`""
+    exit
+}
+
+# Single-Instance Enforcement (Mutex per user session)
+$mutexName = "Local\NetSpeedTaskbar_" + [System.Environment]::UserName
+$script:appMutex = New-Object System.Threading.Mutex($false, $mutexName)
+if (-not $script:appMutex.WaitOne(0, $false)) {
+    # Another instance is already running
     exit
 }
 
@@ -98,6 +110,7 @@ $defaultConfig = @{
     Theme      = 'Fluent'       # Fluent, BluePurple, White, Cyber
     Layout     = 'Stacked'      # Stacked (2 rows), Inline (1 row)
     IntervalMs = 1000           # 500, 1000, 2000
+    Adapter    = 'Auto'         # Auto, All, or Specific Adapter Name
 }
 
 function Load-Config {
