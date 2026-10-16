@@ -68,6 +68,16 @@ A high-performance, seamless network speed monitor built specifically for Window
   - **Single Instance Guard**: Uses a session mutex to ensure only one widget instance runs at a time.
   - **Persistent Storage**: Safely persists your preferences, daily/monthly data usage, and data caps to `%APPDATA%\NetSpeedTaskbar\config.json`.
 
+## Installation & Windows "Installed Apps" Registration
+To install NetSpeedTaskbar so it appears in Windows 11 **Settings &rarr; Apps &rarr; Installed apps**, the classic **Control Panel &rarr; Programs and Features**, and the **Start Menu**:
+
+- **1-Click Install**: Double-click [`Install.bat`](file:///c:/Users/Emmanuel_Kgaphola/Downloads/NetSpeedTaskbar/Install.bat) (or run `.\Install-NetSpeedTaskbar.ps1`).
+  - Installs to `%LOCALAPPDATA%\Programs\NetSpeedTaskbar`.
+  - Creates a Start Menu shortcut with the custom logo.
+  - Registers the app under Windows Uninstall with version, publisher, icon, and estimated size.
+  - Automatically unblocks binaries to avoid Windows Application Control prompts.
+- **Uninstallation**: Uninstall directly from Windows 11 **Settings &rarr; Installed apps** by clicking the three dots next to NetSpeedTaskbar &rarr; **Uninstall**, or by running `Uninstall.bat`.
+
 ## How to Run
 - **Option 1 (Standalone Executable)**: Double-click [`NetSpeedTaskbar.exe`](file:///c:/Users/Emmanuel_Kgaphola/Downloads/NetSpeedTaskbar/NetSpeedTaskbar.exe). Zero dependencies, no console window, native high-performance standalone app with custom icon.
 - **Option 2 (Completely Silent Script)**: Double-click `Start-NetSpeedTaskbar.vbs`. It runs silently in the background with zero command prompt flash.

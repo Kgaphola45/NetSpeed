@@ -184,6 +184,9 @@ Write-Host " Start Menu   : NetSpeedTaskbar" -ForegroundColor White
 Write-Host " Settings     : Listed in 'Installed apps'" -ForegroundColor White
 Write-Host ""
 
+# Unblock files to satisfy Windows Application Control and Mark-of-the-Web
+Get-ChildItem -Path $installDir -File | ForEach-Object { Unblock-File $_.FullName -ErrorAction SilentlyContinue }
+
 # Launch widget
 if (-not $NoLaunch) {
     Write-Host "Launching NetSpeedTaskbar..." -ForegroundColor Green
