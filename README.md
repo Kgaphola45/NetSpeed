@@ -25,6 +25,12 @@ A high-performance, seamless network speed monitor built specifically for Window
     - **Click Shortcuts**: Configure what Double-Click and Middle-Click do.
     - **Network Adapter**: Switch between **Auto (Active Internet Gateway)**, **All Physical Adapters**, or pin to a specific adapter (e.g. Wi-Fi, Ethernet). Automatically filters out virtual clutter from WSL, Hyper-V, and VPN tunnels.
     - **Speed Unit**: Toggle between **Bytes/s** (KB/s, MB/s) for file transfer speeds and **Bits/s** (Kbps, Mbps) matching ISP bandwidth metrics.
+    - **Ping / Latency Target (0 MB Internet Option)**:
+      - **Local Router / Gateway (0 MB Data - Default)**: Pings your local router (e.g. `192.168.1.1` / `10.0.0.1`), consuming **zero MB of internet data** while still detecting local Wi-Fi or Ethernet network congestion and lag.
+      - **Google DNS (`8.8.8.8`)**: Lightweight check against Google's global anycast DNS.
+      - **Cloudflare DNS (`1.1.1.1`)**: Fast 1.1.1.1 public DNS resolver.
+      - **Custom IP / Host...**: Enter any custom IP address or server.
+      - **Disabled**: Turn off ping completely to maximize battery life and eliminate all background polling.
     - **Top Consumers (last 10s)**: Real-time "Top Talker" detection showing which apps are consuming bandwidth. Uses `Get-NetTCPConnection` + `Get-Process` and `\Process(*)\IO Data Bytes/sec` performance counters. Displays the top 3 processes (e.g. `Chrome.exe - 4.2 MB/s`). Click any process to jump into Windows Resource Monitor (`resmon.exe`) for in-depth per-connection diagnostics, or click **Refresh Now** to trigger an instant scan. 100% native, zero external tools.
     - **Set Monthly Cap (e.g. 200GB)** & **Data Cap Alarm**:
       - **1-Click Right-Click Setup**: Direct `Set Monthly Cap (e.g. 200GB)...` context menu action with simple numerical dialog.
@@ -48,7 +54,7 @@ A high-performance, seamless network speed monitor built specifically for Window
   - **Windows 11 Fluent Hover Card (Rich Tooltip)**:
     - **Connection Info**: Displays adapter name and active Wi-Fi SSID (e.g. `Wi-Fi (How-Wifi)`) or Ethernet controller.
     - **Network Details**: Real-time Local IPv4 Address and Default Gateway.
-    - **Latency (Ping)**: Continuous non-blocking ping to Cloudflare DNS (`1.1.1.1`) with colored health dot.
+    - **Latency (Ping)**: Continuous non-blocking ping to your selected target (Router/Gateway for 0 MB internet, Google 8.8.8.8, Cloudflare 1.1.1.1, or custom) with colored health dot.
     - **Top App Consumer**: Live readout of the highest bandwidth-consuming application (e.g. `Chrome.exe - 4.2 MB/s`).
     - **Session Traffic**: Total downloaded & uploaded during the current session.
     - **Today's & Monthly Usage**: Live Today and This Month cumulative data (both download and upload).
