@@ -88,7 +88,8 @@ public static class Win32 {
 if (-not ([System.Management.Automation.PSTypeName]'Win32').Type) {
     Add-Type -TypeDefinition $win32Def -Language CSharp
 }
-[Win32]::SetProcessDPIAware() | Out-Null
+# Note: Do not call SetProcessDPIAware() as WPF manages Per-Monitor DPI natively,
+# and calling it forces legacy system DPI virtualization across secondary monitors.
 
 # Hide host console window if launched directly
 $consoleHwnd = [Win32]::GetConsoleWindow()
