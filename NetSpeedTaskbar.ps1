@@ -1129,6 +1129,65 @@ $script:pingObj        = [System.Net.NetworkInformation.Ping]::new()
 $script:pingTask       = $null
 $script:currentPing    = $null
 
+$script:cachedSsid     = $null
+$script:lastSsidCheck  = [DateTime]::MinValue
+
+function Get-WifiSsid {
+    if ([DateTime]::Now.Subtract($script:lastSsidCheck).TotalSeconds -lt 10 -and $null -ne $script:cachedSsid) {
+        return $script:cachedSsid
+    }
+    $script:lastSsidCheck = [DateTime]::Now
+    try {
+        $lines = (netsh wlan show interfaces) | Where-Object { $_ -match '^\s*SSID\s*:' }
+        if ($lines) {
+            $script:cachedSsid = ($lines[0] -split ':', 2)[1].Trim()
+            return $script:cachedSsid
+        }
+    } catch { }
+    $script:cachedSsid = ''
+    return ''
+}
+
+$script:historyDown = New-Object 'System.Collections.Generic.List[double]'
+$script:historyUp   = New-Object 'System.Collections.Generic.List[double]'
+
+function Update-Sparkline([double]$rx, [double]$tx) {
+    $script:historyDown.Add($rx)
+    $script:historyUp.Add($tx)
+    if ($script:historyDown.Count -gt 30) { $script:historyDown.RemoveAt(0) }
+    if ($script:historyUp.Count -gt 30)   { $script:historyUp.RemoveAt(0) }
+
+    if (-not $tipGraphDown -or -not $tipGraphUp) { return }
+
+    $maxVal = 10240.0 # Min 10 KB/s scale
+    foreach ($v in $script:historyDown) { if ($v -gt $maxVal) { $maxVal = $v } }
+    foreach ($v in $script:historyUp)   { if ($v -gt $maxVal) { $maxVal = $v } }
+
+    $w = 210.0
+    $h = 34.0
+    $n = $script:historyDown.Count
+    if ($n -lt 2) { return }
+
+    $ptsDown = New-Object System.Windows.Media.PointCollection
+    $ptsUp   = New-Object System.Windows.Media.PointCollection
+
+    for ($i = 0; $i -lt $n; $i++) {
+        $x = ($i / [Math]::Max(1, $n - 1)) * $w
+        $yD = $h - (($script:historyDown[$i] / $maxVal) * ($h - 4)) - 2
+        $yU = $h - (($script:historyUp[$i] / $maxVal) * ($h - 4)) - 2
+        $ptsDown.Add((New-Object System.Windows.Point($x, [Math]::Max(2, $yD))))
+        $ptsUp.Add((New-Object System.Windows.Point($x, [Math]::Max(2, $yU))))
+    }
+
+    $tipGraphDown.Points = $ptsDown
+    $tipGraphUp.Points   = $ptsUp
+
+    if ($tipGraphPeak) {
+        $fmtPeak = Format-Speed $maxVal
+        $tipGraphPeak.Text = "Peak: $($fmtPeak.Val)$($fmtPeak.Unit)"
+    }
+}
+
 $timer = New-Object System.Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromMilliseconds($script:Config.IntervalMs)
 
@@ -1163,6 +1222,9 @@ $timer.Add_Tick({
     $unitDownInline.Text  = $fmtDown.Unit
     $valUpInline.Text     = $fmtUp.Val
     $unitUpInline.Text    = $fmtUp.Unit
+
+    # Update 30-Second Sparkline History
+    Update-Sparkline $dRx $dTx
 
     # Asynchronous Non-Blocking Ping (every ~2 seconds)
     $script:tickCounter++
@@ -1211,9 +1273,35 @@ $timer.Add_Tick({
 
         $activeIfaces = Get-TargetInterfaces
         if ($activeIfaces.Count -gt 0) {
-            $tipAdapterName.Text = $activeIfaces[0].Name
+            $iface = $activeIfaces[0]
+            if ($iface.NetworkInterfaceType -eq 'Wireless80211') {
+                $ssid = Get-WifiSsid
+                if ($ssid) {
+                    $tipAdapterName.Text = "Wi-Fi ($ssid)"
+                } else {
+                    $tipAdapterName.Text = "Wi-Fi ($($iface.Name))"
+                }
+            } else {
+                $tipAdapterName.Text = "$($iface.Name) (Ethernet)"
+            }
+
+            # Retrieve Local IP and Gateway
+            try {
+                $u = $iface.GetIPProperties().UnicastAddresses | 
+                    Where-Object { $_.Address.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork }
+                $ipStr = if ($u) { $u[0].Address.ToString() } else { '--' }
+
+                $g = $iface.GetIPProperties().GatewayAddresses | 
+                    Where-Object { $_.Address.ToString() -ne '0.0.0.0' -and $_.Address.ToString() -ne '::' }
+                $gwStr = if ($g) { $g[0].Address.ToString() } else { '--' }
+
+                if ($tipIpGateway) {
+                    $tipIpGateway.Text = "$ipStr / $gwStr"
+                }
+            } catch { }
         } else {
             $tipAdapterName.Text = 'Disconnected'
+            if ($tipIpGateway) { $tipIpGateway.Text = '-- / --' }
         }
     }
 
