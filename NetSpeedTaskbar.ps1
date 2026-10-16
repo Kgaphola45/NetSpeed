@@ -114,6 +114,8 @@ $defaultConfig = @{
     SpeedUnit          = 'Bytes'        # Bytes, Bits
     DoubleClickAction  = 'TaskMgr'      # TaskMgr, Snap, NetworkSettings, Connections
     MiddleClickAction  = 'NetworkSettings' # TaskMgr, Snap, NetworkSettings, Connections
+    Opacity            = 1.0            # 1.0, 0.85, 0.70, 0.50
+    FontSizePreset     = 'Standard'     # Small, Standard, Large
 }
 
 function Load-Config {
