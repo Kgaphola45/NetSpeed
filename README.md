@@ -32,11 +32,15 @@ A high-performance, seamless network speed monitor built specifically for Window
       - **Custom IP / Host...**: Enter any custom IP address or server.
       - **Disabled**: Turn off ping completely to maximize battery life and eliminate all background polling.
     - **Top Consumers (last 10s)**: Real-time "Top Talker" detection showing which apps are consuming bandwidth. Uses `Get-NetTCPConnection` + `Get-Process` and `\Process(*)\IO Data Bytes/sec` performance counters. Displays the top 3 processes (e.g. `Chrome.exe - 4.2 MB/s`). Click any process to jump into Windows Resource Monitor (`resmon.exe`) for in-depth per-connection diagnostics, or click **Refresh Now** to trigger an instant scan. 100% native, zero external tools.
-    - **Set Monthly Cap (e.g. 200GB)** & **Data Cap Alarm**:
-      - **1-Click Right-Click Setup**: Direct `Set Monthly Cap (e.g. 200GB)...` context menu action with simple numerical dialog.
-      - **Monthly Cap Presets**: Disabled (Unlimited), 50 GB, 100 GB, 200 GB (Recommended), 300 GB, 500 GB, 1 TB, or custom GB.
-      - **90% Red Alarm**: Automatically turns widget speed text and warning dot **RED** once monthly data usage reaches 90% (`$monthTotal -gt $cap * 0.9`), visually alerting capped or metered connections.
-      - **Tooltip Progress Bar**: Visual progress bar in the hover card with live percentage (`{0:N1}%`), color-coded states (Mint <80%, Amber 80–90%, Red >90%), and alarm status message.
+    - **Set Data Cap (MB / GB)** & **Data Cap Alarm**:
+      - **1-Click Right-Click Setup**: Direct `Set Data Cap (MB / GB)...` context menu action with an intuitive dialog accepting any unit (e.g. `500 MB`, `2000 MB`, `50 GB`, `200 GB`, `1.5 GB`, or `0` to disable).
+      - **Flexible Unit Selection (MB or GB)**: Perfect for mobile hotspots and metered cellular connections with daily/monthly limits (e.g. `500 MB` or `2000 MB`) as well as broadband fiber plans (`100 GB`, `200 GB`, `500 GB`).
+      - **Preset Submenus**:
+        - **Gigabytes (GB) Presets**: `10 GB`, `25 GB`, `50 GB`, `100 GB`, `200 GB (Recommended)`, `500 GB`, `1 TB (1000 GB)`, or `Disabled`.
+        - **Megabytes (MB) Presets**: `250 MB`, `500 MB`, `1000 MB (~1 GB)`, `2000 MB (~2 GB)`, `5000 MB (~5 GB)`.
+      - **Cap Period**: Toggle between **Monthly Cap** and **Daily Cap** tracking.
+      - **90% Red Alarm**: Automatically turns widget speed text and warning dot **RED** once data usage reaches 90% of your configured cap (`$usedTotal -gt $cap * 0.9`), visually alerting capped connections before overage fees occur.
+      - **Tooltip Progress Bar**: Visual progress bar in the hover card with live percentage (`{0:N1}%`), color-coded states (Mint <80%, Amber 80–90%, Red >90%), and alarm status message showing exact usage vs cap in MB or GB.
       - **Windows Native Alerts**: Balloon/toast alert notification when reaching 90% alarm threshold or exceeding 100% data cap.
       - **Traffic Totals & Resets**: Real-time tracking and independent reset options for **Today**, **This Month**, and **Session**.
     - **Color Scheme**:
