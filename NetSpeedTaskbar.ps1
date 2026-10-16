@@ -1860,13 +1860,15 @@ $timer.Add_Tick({
         $tipLiveSpeed.Text   = ('{0}{1} ' + [char]0x2193 + '  {2}{3} ' + [char]0x2191) -f $fmtDown.Val, $fmtDown.Unit, $fmtUp.Val, $fmtUp.Unit
 
         # Update Today and Monthly Usage in ToolTip
+        $arrowDown = [char]0x2193
+        $arrowUp   = [char]0x2191
         if ($tipTodayUsage) {
             $tToday = $script:Config.DailyRxBytes + $script:Config.DailyTxBytes
-            $tipTodayUsage.Text = '{0} (↓ {1} / ↑ {2})' -f (Format-DataSize $tToday), (Format-DataSize $script:Config.DailyRxBytes), (Format-DataSize $script:Config.DailyTxBytes)
+            $tipTodayUsage.Text = ('{0} ({1} {2} / {3} {4})' -f (Format-DataSize $tToday), $arrowDown, (Format-DataSize $script:Config.DailyRxBytes), $arrowUp, (Format-DataSize $script:Config.DailyTxBytes))
         }
         if ($tipMonthUsage) {
             $tMonth = $script:Config.MonthlyRxBytes + $script:Config.MonthlyTxBytes
-            $tipMonthUsage.Text = '{0} (↓ {1} / ↑ {2})' -f (Format-DataSize $tMonth), (Format-DataSize $script:Config.MonthlyRxBytes), (Format-DataSize $script:Config.MonthlyTxBytes)
+            $tipMonthUsage.Text = ('{0} ({1} {2} / {3} {4})' -f (Format-DataSize $tMonth), $arrowDown, (Format-DataSize $script:Config.MonthlyRxBytes), $arrowUp, (Format-DataSize $script:Config.MonthlyTxBytes))
         }
 
         # Update Cap Warning / Progress Section & Dot
