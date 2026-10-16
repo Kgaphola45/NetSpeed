@@ -29,7 +29,7 @@ if (-not $script:appMutex.WaitOne(0, $false)) {
     exit
 }
 
-Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms, System.Drawing
+Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms, System.Drawing, Microsoft.VisualBasic
 
 # ------------------------------------------------------------------------------
 # 1. Native Win32 Interop (Safe for 32-bit & 64-bit PowerShell)
@@ -105,18 +105,27 @@ $configFile = Join-Path $configDir 'config.json'
 if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
 
 $defaultConfig = @{
-    Left       = $null
-    Top        = $null
-    Locked     = $false
-    Theme      = 'Fluent'       # Fluent, BluePurple, White, Cyber
-    Layout     = 'Stacked'      # Stacked (2 rows), Inline (1 row)
-    IntervalMs = 1000           # 500, 1000, 2000
-    Adapter            = 'Auto'         # Auto, All, or Specific Adapter Name
-    SpeedUnit          = 'Bytes'        # Bytes, Bits
-    DoubleClickAction  = 'TaskMgr'      # TaskMgr, Snap, NetworkSettings, Connections
+    Left               = $null
+    Top                = $null
+    Locked             = $false
+    Theme              = 'Fluent'          # Fluent, BluePurple, White, Cyber
+    Layout             = 'Stacked'         # Stacked (2 rows), Inline (1 row)
+    IntervalMs         = 1000              # 500, 1000, 2000
+    Adapter            = 'Auto'            # Auto, All, or Specific Adapter Name
+    SpeedUnit          = 'Bytes'           # Bytes, Bits
+    DoubleClickAction  = 'TaskMgr'         # TaskMgr, Snap, NetworkSettings, Connections
     MiddleClickAction  = 'NetworkSettings' # TaskMgr, Snap, NetworkSettings, Connections
-    Opacity            = 1.0            # 1.0, 0.85, 0.70, 0.50
-    FontSizePreset     = 'Standard'     # Small, Standard, Large
+    Opacity            = 1.0               # 1.0, 0.85, 0.70, 0.50
+    FontSizePreset     = 'Standard'        # Small, Standard, Large
+    DataCapGB          = 0                 # 0 = Disabled, 10, 25, 50, 100, etc.
+    DataCapPeriod      = 'Monthly'         # Monthly, Daily
+    CapWarnPercent     = 80                # 70, 80, 90, 95
+    DailyUsageDate     = ''                # 'yyyy-MM-dd'
+    DailyRxBytes       = 0L
+    DailyTxBytes       = 0L
+    MonthlyUsageMonth  = ''                # 'yyyy-MM'
+    MonthlyRxBytes     = 0L
+    MonthlyTxBytes     = 0L
 }
 
 function Load-Config {
@@ -127,6 +136,13 @@ function Load-Config {
             foreach ($prop in $json.PSObject.Properties) {
                 $cfg[$prop.Name] = $prop.Value
             }
+            # Ensure proper numeric typing for 64-bit byte counters
+            $cfg.DailyRxBytes   = [long]$cfg.DailyRxBytes
+            $cfg.DailyTxBytes   = [long]$cfg.DailyTxBytes
+            $cfg.MonthlyRxBytes = [long]$cfg.MonthlyRxBytes
+            $cfg.MonthlyTxBytes = [long]$cfg.MonthlyTxBytes
+            $cfg.DataCapGB      = [double]$cfg.DataCapGB
+            $cfg.CapWarnPercent = [int]$cfg.CapWarnPercent
             return $cfg
         } catch { }
     }
