@@ -602,11 +602,29 @@ $tipGraphPeak    = $win.FindName('TipGraphPeak')
 # ------------------------------------------------------------------------------
 $brushConverter = New-Object System.Windows.Media.BrushConverter
 
+function Get-TaskbarIsLight {
+    try {
+        $regVal = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' -Name 'SystemUsesLightTheme' -ErrorAction SilentlyContinue).SystemUsesLightTheme
+        return ($regVal -eq 1)
+    } catch {
+        return $false
+    }
+}
+
+$script:lastTaskbarIsLight = Get-TaskbarIsLight
+
 function Set-ThemeColors {
     param([string]$name)
-    if (-not $Themes.ContainsKey($name)) { $name = 'Fluent' }
-    $t = $Themes[$name]
+    if (-not $name) { $name = 'Auto' }
     $script:Config.Theme = $name
+
+    $effectiveName = $name
+    if ($name -eq 'Auto') {
+        $effectiveName = if (Get-TaskbarIsLight) { 'FluentLight' } else { 'Fluent' }
+    }
+
+    if (-not $Themes.ContainsKey($effectiveName)) { $effectiveName = 'Fluent' }
+    $t = $Themes[$effectiveName]
 
     $downBrush = $brushConverter.ConvertFromString($t.DownColor)
     $upBrush   = $brushConverter.ConvertFromString($t.UpColor)
@@ -626,6 +644,19 @@ function Set-ThemeColors {
     $valUpInline.Foreground    = $valBrush
     $unitDownInline.Foreground = $unitBrush
     $unitUpInline.Foreground   = $unitBrush
+
+    # Dynamic drop shadow for high contrast on light vs dark taskbars
+    if ($container -and $container.Effect -is [System.Windows.Media.Effects.DropShadowEffect]) {
+        if ($effectiveName -eq 'FluentLight') {
+            $container.Effect.Color   = [System.Windows.Media.Color]::FromArgb(255, 255, 255, 255)
+            $container.Effect.Opacity = 0.7
+            $container.Effect.BlurRadius = 3
+        } else {
+            $container.Effect.Color   = [System.Windows.Media.Color]::FromArgb(255, 0, 0, 0)
+            $container.Effect.Opacity = 0.8
+            $container.Effect.BlurRadius = 4
+        }
+    }
 }
 
 $FontPresets = @{
