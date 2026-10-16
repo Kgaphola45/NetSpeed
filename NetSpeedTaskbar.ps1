@@ -912,17 +912,116 @@ $container.Add_MouseDown({
 })
 
 # ------------------------------------------------------------------------------
-# 8. Windows 11 Dark Context Menu
+# 8. Top Bandwidth Consumers (Background Non-Blocking Sampler)
+# ------------------------------------------------------------------------------
+$script:topConsumerPs       = $null
+$script:topConsumerAsync    = $null
+$script:topConsumersData    = @()
+$script:lastTopConsumerTime = [DateTime]::MinValue
+$script:updateTopConsumersUIAction = $null
+
+function Start-TopConsumerSample {
+    param([bool]$force = $false)
+    if ($script:topConsumerPs -ne $null) { return }
+    if (-not $force -and [DateTime]::Now.Subtract($script:lastTopConsumerTime).TotalSeconds -lt 8) { return }
+
+    try {
+        $ps = [powershell]::Create()
+        [void]$ps.AddScript({
+            try {
+                $inv = [System.Globalization.CultureInfo]::InvariantCulture
+                $netPids = Get-NetTCPConnection -State Established,SynSent -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
+                $netProcNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+                $procMap = @{}
+                if ($netPids) {
+                    Get-Process -Id $netPids -ErrorAction SilentlyContinue | ForEach-Object {
+                        $pname = $_.ProcessName
+                        $procMap[$pname.ToLower()] = $pname
+                        [void]$netProcNames.Add($pname)
+                    }
+                }
+
+                $samples = (Get-Counter "\Process(*)\IO Data Bytes/sec" -ErrorAction SilentlyContinue).CounterSamples |
+                    Where-Object { $_.CookedValue -gt 1024 -and $_.InstanceName -notmatch "^(_total|idle|system)$" }
+
+                if (-not $samples) { return @() }
+
+                $grouped = $samples | Group-Object { $_.InstanceName -replace "#\d+$", "" } |
+                    Where-Object { $netProcNames.Count -eq 0 -or $netProcNames.Contains($_.Name) } |
+                    Select-Object Name, @{Name="BytesPerSec"; Expression={ ($_.Group | Measure-Object -Property CookedValue -Sum).Sum }} |
+                    Sort-Object BytesPerSec -Descending |
+                    Select-Object -First 3
+
+                $results = @()
+                foreach ($g in $grouped) {
+                    $bps = [double]$g.BytesPerSec
+                    $rawName = $g.Name
+                    $pName = if ($procMap.ContainsKey($rawName.ToLower())) { $procMap[$rawName.ToLower()] } else { $rawName }
+                    if ($pName -notmatch "\.[a-zA-Z0-9]+$") { $pName = "$pName.exe" }
+                    if ($pName.Length -gt 1) {
+                        $pName = $pName.Substring(0, 1).ToUpper() + $pName.Substring(1)
+                    }
+
+                    $speed = if ($bps -ge 1GB) { [string]::Format($inv, "{0:0.##} GB/s", ($bps / 1GB)) }
+                             elseif ($bps -ge 10MB) { [string]::Format($inv, "{0:0.#} MB/s", ($bps / 1MB)) }
+                             elseif ($bps -ge 1MB) { [string]::Format($inv, "{0:0.##} MB/s", ($bps / 1MB)) }
+                             elseif ($bps -ge 100KB) { [string]::Format($inv, "{0:0} KB/s", ($bps / 1KB)) }
+                             elseif ($bps -ge 1KB) { [string]::Format($inv, "{0:0.#} KB/s", ($bps / 1KB)) }
+                             else { [string]::Format($inv, "{0:0} B/s", $bps) }
+
+                    $results += [PSCustomObject]@{
+                        Name        = $pName
+                        BytesPerSec = $bps
+                        Speed       = $speed
+                        Display     = "$pName - $speed"
+                    }
+                }
+                return $results
+            } catch {
+                return @()
+            }
+        })
+        $script:topConsumerPs    = $ps
+        $script:topConsumerAsync = $ps.BeginInvoke()
+    } catch {
+        if ($ps) { $ps.Dispose() }
+        $script:topConsumerPs    = $null
+        $script:topConsumerAsync = $null
+    }
+}
+
+function Check-TopConsumerSample {
+    if ($script:topConsumerAsync -and $script:topConsumerAsync.IsCompleted) {
+        try {
+            $res = $script:topConsumerPs.EndInvoke($script:topConsumerAsync)
+            $script:topConsumersData = @($res)
+            $script:lastTopConsumerTime = [DateTime]::Now
+            if ($script:updateTopConsumersUIAction) {
+                & $script:updateTopConsumersUIAction
+            }
+        } catch { }
+        finally {
+            if ($script:topConsumerPs) {
+                $script:topConsumerPs.Dispose()
+                $script:topConsumerPs    = $null
+                $script:topConsumerAsync = $null
+            }
+        }
+    }
+}
+
+# ------------------------------------------------------------------------------
+# 9. Windows 11 Dark Context Menu
 $menu = New-Object System.Windows.Controls.ContextMenu
 $menu.Resources = $win.Resources
 $menu.Style     = $win.FindResource([System.Windows.Controls.ContextMenu])
 
-# Auto-dismiss ContextMenu when clicking any leaf MenuItem
+# Auto-dismiss ContextMenu when clicking any leaf MenuItem (unless tagged NoDismiss)
 $menu.AddHandler([System.Windows.Controls.MenuItem]::ClickEvent, [System.Windows.RoutedEventHandler]{
     param($s, $e)
     if ($e.OriginalSource -is [System.Windows.Controls.MenuItem]) {
         $mi = [System.Windows.Controls.MenuItem]$e.OriginalSource
-        if (-not $mi.HasItems) {
+        if (-not $mi.HasItems -and $mi.Tag -ne 'NoDismiss') {
             $menu.IsOpen = $false
         }
     }
@@ -1113,6 +1212,103 @@ $unitBitsItem.Add_Click({
 $menuUnit.Items.Add($unitBytesItem) | Out-Null
 $menuUnit.Items.Add($unitBitsItem) | Out-Null
 $menu.Items.Add($menuUnit) | Out-Null
+
+# Top Consumers Submenu (Which app is using bandwidth)
+$menuTopConsumers = New-Object System.Windows.Controls.MenuItem
+$menuTopConsumers.Header = 'Top Consumers (last 10s)'
+
+$itemTop1 = New-Object System.Windows.Controls.MenuItem
+$itemTop1.Header = '1. Scanning active apps...'
+$itemTop1.IsEnabled = $false
+
+$itemTop2 = New-Object System.Windows.Controls.MenuItem
+$itemTop2.Header = '2. --'
+$itemTop2.IsEnabled = $false
+
+$itemTop3 = New-Object System.Windows.Controls.MenuItem
+$itemTop3.Header = '3. --'
+$itemTop3.IsEnabled = $false
+
+function Update-TopConsumersMenuUI {
+    if ($script:topConsumersData -and $script:topConsumersData.Count -gt 0) {
+        # 1st Top Consumer
+        $itemTop1.Header = "1. $($script:topConsumersData[0].Display)"
+        $itemTop1.IsEnabled = $true
+        $itemTop1.Tag = $script:topConsumersData[0].Name
+        $itemTop1.ToolTip = "Open Resource Monitor for $($script:topConsumersData[0].Name)"
+
+        # 2nd Top Consumer
+        if ($script:topConsumersData.Count -gt 1) {
+            $itemTop2.Header = "2. $($script:topConsumersData[1].Display)"
+            $itemTop2.IsEnabled = $true
+            $itemTop2.Tag = $script:topConsumersData[1].Name
+            $itemTop2.ToolTip = "Open Resource Monitor for $($script:topConsumersData[1].Name)"
+            $itemTop2.Visibility = [System.Windows.Visibility]::Visible
+        } else {
+            $itemTop2.Header = "2. (No other active consumers)"
+            $itemTop2.IsEnabled = $false
+            $itemTop2.Visibility = [System.Windows.Visibility]::Visible
+        }
+
+        # 3rd Top Consumer
+        if ($script:topConsumersData.Count -gt 2) {
+            $itemTop3.Header = "3. $($script:topConsumersData[2].Display)"
+            $itemTop3.IsEnabled = $true
+            $itemTop3.Tag = $script:topConsumersData[2].Name
+            $itemTop3.ToolTip = "Open Resource Monitor for $($script:topConsumersData[2].Name)"
+            $itemTop3.Visibility = [System.Windows.Visibility]::Visible
+        } else {
+            $itemTop3.Visibility = [System.Windows.Visibility]::Collapsed
+        }
+    } else {
+        $itemTop1.Header = if ($script:topConsumerPs) { 'Scanning active apps...' } else { 'Idle (No active data transfer)' }
+        $itemTop1.IsEnabled = $false
+        $itemTop2.Visibility = [System.Windows.Visibility]::Collapsed
+        $itemTop3.Visibility = [System.Windows.Visibility]::Collapsed
+    }
+}
+
+$script:updateTopConsumersUIAction = { Update-TopConsumersMenuUI }
+
+# Click on any consumer item launches Resource Monitor
+$consumerClickHandler = [System.Windows.RoutedEventHandler]{
+    param($s, $e)
+    try { Start-Process resmon.exe } catch { }
+}
+$itemTop1.Add_Click($consumerClickHandler)
+$itemTop2.Add_Click($consumerClickHandler)
+$itemTop3.Add_Click($consumerClickHandler)
+
+# Refresh Now item
+$itemTopRefresh = New-Object System.Windows.Controls.MenuItem
+$itemTopRefresh.Header = 'Refresh Now'
+$itemTopRefresh.Tag    = 'NoDismiss'
+$itemTopRefresh.Add_Click({
+    Start-TopConsumerSample $true
+    $itemTop1.Header = 'Scanning active apps...'
+    $itemTop1.IsEnabled = $false
+})
+
+# Open Resource Monitor
+$itemOpenResmon = New-Object System.Windows.Controls.MenuItem
+$itemOpenResmon.Header = 'Open Resource Monitor (Network)...'
+$itemOpenResmon.Add_Click({
+    try { Start-Process resmon.exe } catch { }
+})
+
+$menuTopConsumers.Add_SubmenuOpened({
+    Start-TopConsumerSample $false
+    Update-TopConsumersMenuUI
+})
+
+$menuTopConsumers.Items.Add($itemTop1) | Out-Null
+$menuTopConsumers.Items.Add($itemTop2) | Out-Null
+$menuTopConsumers.Items.Add($itemTop3) | Out-Null
+$menuTopConsumers.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+$menuTopConsumers.Items.Add($itemTopRefresh) | Out-Null
+$menuTopConsumers.Items.Add($itemOpenResmon) | Out-Null
+
+$menu.Items.Add($menuTopConsumers) | Out-Null
 
 # Data Usage & Cap Submenu
 $menuDataUsage = New-Object System.Windows.Controls.MenuItem
