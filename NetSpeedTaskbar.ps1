@@ -645,11 +645,82 @@ $menuLock.Add_Click({
 })
 $menu.Items.Add($menuLock) | Out-Null
 
-# Snap to Taskbar
+# Snap to Taskbar Submenu (Multi-Monitor aware)
 $menuSnap = New-Object System.Windows.Controls.MenuItem
-$menuSnap.Header = 'Snap to Taskbar (Tray Area)'
-$menuSnap.Add_Click({ Snap-ToTaskbar })
+$menuSnap.Header = 'Snap to Taskbar'
+
+$snapCurrentItem = New-Object System.Windows.Controls.MenuItem
+$snapCurrentItem.Header = 'Snap to Current Screen'
+$snapCurrentItem.Add_Click({ Snap-ToTaskbar })
+$menuSnap.Items.Add($snapCurrentItem) | Out-Null
+
+try {
+    $screens = [System.Windows.Forms.Screen]::AllScreens
+    if ($screens.Count -gt 1) {
+        $menuSnap.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+        for ($si = 0; $si -lt $screens.Count; $si++) {
+            $scr = $screens[$si]
+            $itemScr = New-Object System.Windows.Controls.MenuItem
+            $primLabel = if ($scr.Primary) { ' (Primary)' } else { '' }
+            $itemScr.Header = "Monitor $($si + 1)$primLabel - $($scr.Bounds.Width)x$($scr.Bounds.Height)"
+            $itemScr.Tag = $scr
+            $itemScr.Add_Click({
+                param($s, $e)
+                Snap-ToTaskbar $s.Tag
+            })
+            $menuSnap.Items.Add($itemScr) | Out-Null
+        }
+    }
+} catch { }
+
 $menu.Items.Add($menuSnap) | Out-Null
+
+# Click Shortcuts Submenu
+$menuActions = New-Object System.Windows.Controls.MenuItem
+$menuActions.Header = 'Click Shortcuts'
+
+$actionOptions = @(
+    @{ Id = 'TaskMgr';         Name = 'Task Manager (Performance)' },
+    @{ Id = 'NetworkSettings'; Name = 'Windows Network Settings' },
+    @{ Id = 'Connections';     Name = 'Network Connections (ncpa.cpl)' },
+    @{ Id = 'Snap';            Name = 'Snap to Taskbar' }
+)
+
+# Double-Click Submenu
+$menuDoubleClick = New-Object System.Windows.Controls.MenuItem
+$menuDoubleClick.Header = 'Double-Click Action'
+foreach ($opt in $actionOptions) {
+    $itemOpt = New-Object System.Windows.Controls.MenuItem
+    $itemOpt.Header = $opt.Name
+    $itemOpt.Tag    = $opt.Id
+    $itemOpt.IsChecked = ($script:Config.DoubleClickAction -eq $opt.Id)
+    $itemOpt.Add_Click({
+        param($s, $e)
+        $script:Config.DoubleClickAction = $s.Tag
+        Save-Config
+        foreach ($sub in $menuDoubleClick.Items) { $sub.IsChecked = ($sub.Tag -eq $s.Tag) }
+    })
+    $menuDoubleClick.Items.Add($itemOpt) | Out-Null
+}
+$menuActions.Items.Add($menuDoubleClick) | Out-Null
+
+# Middle-Click Submenu
+$menuMiddleClick = New-Object System.Windows.Controls.MenuItem
+$menuMiddleClick.Header = 'Middle-Click Action'
+foreach ($opt in $actionOptions) {
+    $itemOpt = New-Object System.Windows.Controls.MenuItem
+    $itemOpt.Header = $opt.Name
+    $itemOpt.Tag    = $opt.Id
+    $itemOpt.IsChecked = ($script:Config.MiddleClickAction -eq $opt.Id)
+    $itemOpt.Add_Click({
+        param($s, $e)
+        $script:Config.MiddleClickAction = $s.Tag
+        Save-Config
+        foreach ($sub in $menuMiddleClick.Items) { $sub.IsChecked = ($sub.Tag -eq $s.Tag) }
+    })
+    $menuMiddleClick.Items.Add($itemOpt) | Out-Null
+}
+$menuActions.Items.Add($menuMiddleClick) | Out-Null
 
 $menu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
 
