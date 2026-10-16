@@ -563,9 +563,15 @@ function Set-WidgetOpacity([double]$val) {
 }
 
 Set-ThemeColors $script:Config.Theme
-Set-FontSizePreset (if ($script:Config.FontSizePreset) { $script:Config.FontSizePreset } else { 'Standard' })
-Set-LayoutMode (if ($script:Config.Layout) { $script:Config.Layout } else { 'Stacked' })
-Set-WidgetOpacity (if ($null -ne $script:Config.Opacity) { [double]$script:Config.Opacity } else { 1.0 })
+
+$initFont = if ($script:Config.FontSizePreset) { $script:Config.FontSizePreset } else { 'Standard' }
+Set-FontSizePreset $initFont
+
+$initLayout = if ($script:Config.Layout) { $script:Config.Layout } else { 'Stacked' }
+Set-LayoutMode $initLayout
+
+$initOpacity = if ($null -ne $script:Config.Opacity) { [double]$script:Config.Opacity } else { 1.0 }
+Set-WidgetOpacity $initOpacity
 
 # Hover effect: subtle rounded Windows 11 pill highlight on mouse hover
 $hoverBrush       = $brushConverter.ConvertFromString('#16FFFFFF')
