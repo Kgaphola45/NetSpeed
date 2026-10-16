@@ -1813,8 +1813,11 @@ $menuStartup.IsCheckable = $true
 $menuStartup.IsChecked = Test-StartupEnabled
 $menuStartup.Add_Click({
     if ($menuStartup.IsChecked) {
+        $exe = Join-Path $script:ScriptDir 'NetSpeedTaskbar.exe'
         $vbs = Join-Path $script:ScriptDir 'Start-NetSpeedTaskbar.vbs'
-        if (Test-Path $vbs) {
+        if (Test-Path $exe) {
+            $cmd = "`"$exe`""
+        } elseif (Test-Path $vbs) {
             $cmd = "wscript.exe `"$vbs`""
         } else {
             $cmd = "powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Sta -File `"$($script:ScriptPath)`""

@@ -23,7 +23,8 @@ Write-Host "[1/3] Terminating active NetSpeedTaskbar processes..." -ForegroundCo
 $stopped = 0
 try {
     $processes = Get-CimInstance Win32_Process | Where-Object { 
-        $_.CommandLine -and $_.CommandLine -match 'NetSpeedTaskbar\.ps1' -and $_.ProcessId -ne $PID 
+        ($_.Name -eq 'NetSpeedTaskbar.exe') -or 
+        ($_.CommandLine -and $_.CommandLine -match 'NetSpeedTaskbar\.ps1' -and $_.ProcessId -ne $PID)
     }
     foreach ($p in $processes) {
         Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
@@ -74,10 +75,13 @@ if (-not $NoRestart) {
     Write-Host "[3/3] Relaunching NetSpeedTaskbar on primary taskbar..." -ForegroundColor Yellow
     $scriptDir = $PSScriptRoot
     if (-not $scriptDir) { $scriptDir = (Get-Location).Path }
-    $vbs = Join-Path $scriptDir 'Start-NetSpeedTaskbar.vbs'
+    $exe = Join-Path $scriptDir 'NetSpeedTaskbar.exe'
     $ps1 = Join-Path $scriptDir 'NetSpeedTaskbar.ps1'
 
-    if (Test-Path $ps1) {
+    if (Test-Path $exe) {
+        Start-Process -FilePath $exe
+        Write-Host "      Started NetSpeedTaskbar.exe successfully." -ForegroundColor Green
+    } elseif (Test-Path $ps1) {
         Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Sta -File `"$ps1`""
         Write-Host "      Started NetSpeedTaskbar.ps1 successfully." -ForegroundColor Green
     }

@@ -69,12 +69,19 @@ A high-performance, seamless network speed monitor built specifically for Window
   - **Persistent Storage**: Safely persists your preferences, daily/monthly data usage, and data caps to `%APPDATA%\NetSpeedTaskbar\config.json`.
 
 ## How to Run
-- **Option 1 (Recommended - Completely Silent)**: Double-click `Start-NetSpeedTaskbar.vbs`. It runs silently in the background with zero command prompt flash.
-- **Option 2**: Double-click `Start-NetSpeedTaskbar.bat`.
-- **Option 3**: In PowerShell:
+- **Option 1 (Standalone Executable)**: Double-click [`NetSpeedTaskbar.exe`](file:///c:/Users/Emmanuel_Kgaphola/Downloads/NetSpeedTaskbar/NetSpeedTaskbar.exe). Zero dependencies, no console window, native high-performance standalone app with custom icon.
+- **Option 2 (Completely Silent Script)**: Double-click `Start-NetSpeedTaskbar.vbs`. It runs silently in the background with zero command prompt flash.
+- **Option 3**: Double-click `Start-NetSpeedTaskbar.bat`.
+- **Option 4**: In PowerShell:
   ```powershell
   powershell -ExecutionPolicy Bypass -WindowStyle Hidden -Sta -File .\NetSpeedTaskbar.ps1
   ```
+
+### Recompiling the Executable
+If you modify `NetSpeedTaskbar.ps1`, you can recompile `NetSpeedTaskbar.exe` at any time with:
+```powershell
+Invoke-ps2exe -inputFile .\NetSpeedTaskbar.ps1 -outputFile .\NetSpeedTaskbar.exe -noConsole -iconFile .\NetSpeedIcon.ico -sta
+```
 
 ## How to Reset Data & Settings
 You can reset data and settings in two easy ways:
