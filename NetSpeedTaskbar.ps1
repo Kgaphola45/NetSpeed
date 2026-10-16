@@ -485,25 +485,87 @@ function Set-ThemeColors {
     $unitUpInline.Foreground   = $unitBrush
 }
 
+$FontPresets = @{
+    'Small' = @{
+        ValSize      = 9.5
+        UnitSize     = 8.0
+        StackedW     = 92
+        StackedH     = 36
+        InlineW      = 155
+        InlineH      = 24
+    }
+    'Standard' = @{
+        ValSize      = 11.0
+        UnitSize     = 9.0
+        StackedW     = 104
+        StackedH     = 42
+        InlineW      = 180
+        InlineH      = 28
+    }
+    'Large' = @{
+        ValSize      = 13.0
+        UnitSize     = 10.5
+        StackedW     = 124
+        StackedH     = 48
+        InlineW      = 215
+        InlineH      = 34
+    }
+}
+
+function Set-FontSizePreset([string]$preset) {
+    if (-not $FontPresets.ContainsKey($preset)) { $preset = 'Standard' }
+    $p = $FontPresets[$preset]
+    $script:Config.FontSizePreset = $preset
+
+    $valDownStacked.FontSize  = $p.ValSize
+    $valUpStacked.FontSize    = $p.ValSize
+    $valDownInline.FontSize   = $p.ValSize
+    $valUpInline.FontSize     = $p.ValSize
+
+    $unitDownStacked.FontSize = $p.UnitSize
+    $unitUpStacked.FontSize   = $p.UnitSize
+    $unitDownInline.FontSize  = $p.UnitSize
+    $unitUpInline.FontSize    = $p.UnitSize
+
+    if ($script:Config.Layout -eq 'Inline') {
+        $win.Width  = $p.InlineW
+        $win.Height = $p.InlineH
+    } else {
+        $win.Width  = $p.StackedW
+        $win.Height = $p.StackedH
+    }
+}
+
 function Set-LayoutMode {
     param([string]$mode)
+    $preset = if ($FontPresets.ContainsKey($script:Config.FontSizePreset)) { $script:Config.FontSizePreset } else { 'Standard' }
+    $p = $FontPresets[$preset]
+
     if ($mode -eq 'Inline') {
         $stackedLayout.Visibility = [System.Windows.Visibility]::Collapsed
         $inlineLayout.Visibility  = [System.Windows.Visibility]::Visible
-        $win.Width  = 180
-        $win.Height = 28
+        $win.Width  = $p.InlineW
+        $win.Height = $p.InlineH
         $script:Config.Layout = 'Inline'
     } else {
         $stackedLayout.Visibility = [System.Windows.Visibility]::Visible
         $inlineLayout.Visibility  = [System.Windows.Visibility]::Collapsed
-        $win.Width  = 104
-        $win.Height = 42
+        $win.Width  = $p.StackedW
+        $win.Height = $p.StackedH
         $script:Config.Layout = 'Stacked'
     }
 }
 
+function Set-WidgetOpacity([double]$val) {
+    if ($val -lt 0.3 -or $val -gt 1.0) { $val = 1.0 }
+    $script:Config.Opacity = $val
+    $win.Opacity = $val
+}
+
 Set-ThemeColors $script:Config.Theme
-Set-LayoutMode  $script:Config.Layout
+Set-FontSizePreset (if ($script:Config.FontSizePreset) { $script:Config.FontSizePreset } else { 'Standard' })
+Set-LayoutMode (if ($script:Config.Layout) { $script:Config.Layout } else { 'Stacked' })
+Set-WidgetOpacity (if ($null -ne $script:Config.Opacity) { [double]$script:Config.Opacity } else { 1.0 })
 
 # Hover effect: subtle rounded Windows 11 pill highlight on mouse hover
 $hoverBrush       = $brushConverter.ConvertFromString('#16FFFFFF')
@@ -516,9 +578,6 @@ $container.Add_MouseLeave({
     $container.Background = $transparentBrush
 })
 
-# ------------------------------------------------------------------------------
-# 6. Windows 11 Taskbar Snapping & Positioning
-# ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 # 6. Windows 11 Taskbar Snapping & Multi-Monitor / Auto-Hide Support
 # ------------------------------------------------------------------------------
@@ -900,6 +959,55 @@ $layoutInlineItem.Add_Click({
 $menuLayout.Items.Add($layoutStackedItem) | Out-Null
 $menuLayout.Items.Add($layoutInlineItem) | Out-Null
 $menu.Items.Add($menuLayout) | Out-Null
+
+# Text Size / Scaling Submenu
+$menuSize = New-Object System.Windows.Controls.MenuItem
+$menuSize.Header = 'Text Size (DPI Scaling)'
+
+$sizeOptions = @(
+    @{ Id = 'Small';    Name = 'Compact (Small)' },
+    @{ Id = 'Standard'; Name = 'Standard (Default)' },
+    @{ Id = 'Large';    Name = 'Large (1440p / 4K)' }
+)
+foreach ($so in $sizeOptions) {
+    $itemSo = New-Object System.Windows.Controls.MenuItem
+    $itemSo.Header = $so.Name
+    $itemSo.Tag    = $so.Id
+    $itemSo.IsChecked = ($script:Config.FontSizePreset -eq $so.Id)
+    $itemSo.Add_Click({
+        param($s, $e)
+        Set-FontSizePreset $s.Tag
+        Save-Config
+        foreach ($sub in $menuSize.Items) { $sub.IsChecked = ($sub.Tag -eq $s.Tag) }
+    })
+    $menuSize.Items.Add($itemSo) | Out-Null
+}
+$menu.Items.Add($menuSize) | Out-Null
+
+# Widget Opacity Submenu
+$menuOpacity = New-Object System.Windows.Controls.MenuItem
+$menuOpacity.Header = 'Widget Opacity'
+
+$opacityOptions = @(
+    @{ Val = 1.0;  Name = '100% (Solid)' },
+    @{ Val = 0.85; Name = '85% (Subtle Glass)' },
+    @{ Val = 0.70; Name = '70% (Translucent)' },
+    @{ Val = 0.50; Name = '50% (Ghost / Minimal)' }
+)
+foreach ($op in $opacityOptions) {
+    $itemOp = New-Object System.Windows.Controls.MenuItem
+    $itemOp.Header = $op.Name
+    $itemOp.Tag    = $op.Val
+    $itemOp.IsChecked = ([Math]::Abs($script:Config.Opacity - $op.Val) -lt 0.05)
+    $itemOp.Add_Click({
+        param($s, $e)
+        Set-WidgetOpacity ([double]$s.Tag)
+        Save-Config
+        foreach ($sub in $menuOpacity.Items) { $sub.IsChecked = ($sub.Tag -eq $s.Tag) }
+    })
+    $menuOpacity.Items.Add($itemOp) | Out-Null
+}
+$menu.Items.Add($menuOpacity) | Out-Null
 
 # Refresh Rate Submenu
 $menuRate = New-Object System.Windows.Controls.MenuItem

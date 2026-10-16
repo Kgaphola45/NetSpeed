@@ -28,6 +28,8 @@ A high-performance, seamless network speed monitor built specifically for Window
     - **Session Data**: View cumulative session downloaded and uploaded data with one-click counter reset.
     - **Color Scheme**: Choose between Windows 11 Fluent (Mint & Amber), Ocean (Blue & Purple), Clean Monochrome (White & Silver), or Cyber Neon (Mint & Pink).
     - **Layout**: Switch between 2 Rows (Stacked) and 1 Row (Inline horizontal).
+    - **Text Size (DPI Scaling)**: Choose between **Compact (Small)**, **Standard (Default)**, or **Large (1440p / 4K)** for optimal readability across any monitor resolution.
+    - **Widget Opacity**: Adjust transparency to blend into custom wallpapers or tools like *TranslucentTB* (**100% Solid**, **85% Subtle Glass**, **70% Translucent**, **50% Minimal/Ghost**).
     - **Refresh Interval**: 0.5s (Fast), 1.0s (Normal), or 2.0s (Battery Saver).
     - **Start with Windows**: Toggle automatic launch on Windows startup (runs silently with zero console window flash).
     - **Exit**: Gracefully terminate.
