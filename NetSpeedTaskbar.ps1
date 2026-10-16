@@ -470,6 +470,69 @@ $menu.Items.Add($menuSnap) | Out-Null
 
 $menu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
 
+# Network Adapter Submenu
+$menuAdapter = New-Object System.Windows.Controls.MenuItem
+$menuAdapter.Header = 'Network Adapter'
+
+function Update-AdapterMenu {
+    $menuAdapter.Items.Clear()
+
+    # Option: Auto
+    $itemAuto = New-Object System.Windows.Controls.MenuItem
+    $itemAuto.Header = 'Auto (Active Gateway)'
+    $itemAuto.Tag    = 'Auto'
+    $itemAuto.IsChecked = ($script:Config.Adapter -eq 'Auto')
+    $itemAuto.Add_Click({
+        param($s, $e)
+        $script:Config.Adapter = 'Auto'
+        $script:prevTotals = Get-NetworkTotals
+        Save-Config
+        Update-AdapterMenu
+    })
+    $menuAdapter.Items.Add($itemAuto) | Out-Null
+
+    # Option: All
+    $itemAll = New-Object System.Windows.Controls.MenuItem
+    $itemAll.Header = 'All Physical Adapters'
+    $itemAll.Tag    = 'All'
+    $itemAll.IsChecked = ($script:Config.Adapter -eq 'All')
+    $itemAll.Add_Click({
+        param($s, $e)
+        $script:Config.Adapter = 'All'
+        $script:prevTotals = Get-NetworkTotals
+        Save-Config
+        Update-AdapterMenu
+    })
+    $menuAdapter.Items.Add($itemAll) | Out-Null
+
+    $menuAdapter.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+
+    # Dynamically enumerate non-loopback adapters
+    try {
+        $ifaces = [Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() |
+            Where-Object { $_.NetworkInterfaceType -notin 'Loopback', 'Tunnel' } |
+            Sort-Object -Property OperationalStatus, Name -Descending
+
+        foreach ($iface in $ifaces) {
+            $statusStr = if ($iface.OperationalStatus -eq 'Up') { '' } else { ' (Offline)' }
+            $item = New-Object System.Windows.Controls.MenuItem
+            $item.Header = "$($iface.Name)$statusStr"
+            $item.Tag    = $iface.Name
+            $item.IsChecked = ($script:Config.Adapter -eq $iface.Name)
+            $item.Add_Click({
+                param($s, $e)
+                $script:Config.Adapter = $s.Tag
+                $script:prevTotals = Get-NetworkTotals
+                Save-Config
+                Update-AdapterMenu
+            })
+            $menuAdapter.Items.Add($item) | Out-Null
+        }
+    } catch { }
+}
+Update-AdapterMenu
+$menu.Items.Add($menuAdapter) | Out-Null
+
 # Color Scheme Submenu
 $menuThemes = New-Object System.Windows.Controls.MenuItem
 $menuThemes.Header = 'Color Scheme'
@@ -554,7 +617,8 @@ $runKeyPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $runKeyName = 'NetSpeedTaskbar'
 
 function Test-StartupEnabled {
-    return [bool](Get-ItemProperty -Path $runKeyPath -Name $runKeyName -ErrorAction SilentlyContinue)
+    $val = (Get-ItemProperty -Path $runKeyPath -Name $runKeyName -ErrorAction SilentlyContinue).$runKeyName
+    return [bool]$val
 }
 
 $menuStartup = New-Object System.Windows.Controls.MenuItem
@@ -563,9 +627,12 @@ $menuStartup.IsCheckable = $true
 $menuStartup.IsChecked = Test-StartupEnabled
 $menuStartup.Add_Click({
     if ($menuStartup.IsChecked) {
-        $myPath = $MyInvocation.MyCommand.Path
-        if (-not $myPath) { $myPath = $PSCommandPath }
-        $cmd = "powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Sta -File `"$myPath`""
+        $vbs = Join-Path $script:ScriptDir 'Start-NetSpeedTaskbar.vbs'
+        if (Test-Path $vbs) {
+            $cmd = "wscript.exe `"$vbs`""
+        } else {
+            $cmd = "powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Sta -File `"$($script:ScriptPath)`""
+        }
         Set-ItemProperty -Path $runKeyPath -Name $runKeyName -Value $cmd -Force
     } else {
         Remove-ItemProperty -Path $runKeyPath -Name $runKeyName -ErrorAction SilentlyContinue
@@ -583,6 +650,16 @@ $menuExit.Add_Click({
     $win.Close()
 })
 $menu.Items.Add($menuExit) | Out-Null
+
+# Clean up mutex when window closes
+$win.Add_Closed({
+    try {
+        if ($script:appMutex) {
+            $script:appMutex.ReleaseMutex()
+            $script:appMutex.Dispose()
+        }
+    } catch { }
+})
 
 $container.ContextMenu = $menu
 
@@ -608,21 +685,70 @@ $win.Add_SourceInitialized({
 # ------------------------------------------------------------------------------
 # 10. Live Network Speed Measurement & Updates
 # ------------------------------------------------------------------------------
+function Get-TargetInterfaces {
+    $all = [Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()
+    
+    # 1. 'All' mode: sum across all active non-loopback/tunnel interfaces
+    if ($script:Config.Adapter -eq 'All') {
+        return @($all | Where-Object { $_.OperationalStatus -eq 'Up' -and $_.NetworkInterfaceType -notin 'Loopback', 'Tunnel' })
+    }
+
+    # 2. Specific adapter selected by name or ID
+    if ($script:Config.Adapter -and $script:Config.Adapter -ne 'Auto') {
+        $matched = @($all | Where-Object { ($_.Name -eq $script:Config.Adapter -or $_.Id -eq $script:Config.Adapter) -and $_.OperationalStatus -eq 'Up' })
+        if ($matched.Count -gt 0) { return $matched }
+        return @()
+    }
+
+    # 3. 'Auto' mode: intelligent active internet adapter discovery
+    # Exclude common virtual adapters (Hyper-V, WSL, VMware, VirtualBox, TAP, Tailscale, ZeroTier, etc.)
+    $candidates = @()
+    foreach ($n in $all) {
+        if ($n.OperationalStatus -eq 'Up' -and $n.NetworkInterfaceType -notin 'Loopback', 'Tunnel') {
+            $isVirtual = $n.Description -match 'Virtual|vEthernet|Hyper-V|VMware|VirtualBox|WSL|TAP|Tailscale|ZeroTier|Npcap|WFP'
+            try {
+                $gw = $n.GetIPProperties().GatewayAddresses | Where-Object { 
+                    $_.Address.ToString() -ne '0.0.0.0' -and $_.Address.ToString() -ne '::' 
+                }
+                if ($gw -and -not $isVirtual) {
+                    # Optimal: active physical adapter with an active gateway
+                    return @($n)
+                }
+                if ($gw) {
+                    $candidates += @{ Iface = $n; Priority = 2 }
+                } elseif (-not $isVirtual) {
+                    $candidates += @{ Iface = $n; Priority = 1 }
+                } else {
+                    $candidates += @{ Iface = $n; Priority = 0 }
+                }
+            } catch {
+                $candidates += @{ Iface = $n; Priority = 0 }
+            }
+        }
+    }
+
+    if ($candidates.Count -gt 0) {
+        $best = ($candidates | Sort-Object Priority -Descending)[0]
+        return @($best.Iface)
+    }
+
+    return @()
+}
+
 function Get-NetworkTotals {
     $rx = 0L; $tx = 0L
-    foreach ($n in [Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
-        if ($n.OperationalStatus -eq 'Up' -and $n.NetworkInterfaceType -notin 'Loopback', 'Tunnel') {
+    $interfaces = Get-TargetInterfaces
+    foreach ($n in $interfaces) {
+        try {
+            $s = $n.GetIPStatistics()
+            $rx += $s.BytesReceived
+            $tx += $s.BytesSent
+        } catch {
             try {
-                $s = $n.GetIPStatistics()
+                $s = $n.GetIPv4Statistics()
                 $rx += $s.BytesReceived
                 $tx += $s.BytesSent
-            } catch {
-                try {
-                    $s = $n.GetIPv4Statistics()
-                    $rx += $s.BytesReceived
-                    $tx += $s.BytesSent
-                } catch { }
-            }
+            } catch { }
         }
     }
     return @($rx, $tx)

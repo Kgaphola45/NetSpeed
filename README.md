@@ -20,12 +20,14 @@ A high-performance, seamless network speed monitor built specifically for Window
   - **Right Click Context Menu (Windows 11 Dark Theme)**:
     -  **Lock Position**: Prevent accidental dragging.
     -  **Snap to Taskbar**: Realign beside system tray.
+    -  **Network Adapter**: Switch between **Auto (Active Internet Gateway)**, **All Physical Adapters**, or pin to a specific adapter (e.g. Wi-Fi, Ethernet). Automatically filters out virtual clutter from WSL, Hyper-V, and VPN tunnels.
     -  **Color Scheme**: Choose between Windows 11 Fluent (Mint & Amber), Ocean (Blue & Purple), Clean Monochrome (White & Silver), or Cyber Neon (Mint & Pink).
     -  **Layout**: Switch between 2 Rows (Stacked) and 1 Row (Inline horizontal).
     -  **Refresh Interval**: 0.5s (Fast), 1.0s (Normal), or 2.0s (Battery Saver).
-    -  **Start with Windows**: Toggle automatic launch on Windows startup.
+    -  **Start with Windows**: Toggle automatic launch on Windows startup (runs silently with zero console window flash).
     -  **Exit**: Gracefully terminate.
-  - **Position Memory**: Saves your preferred position, layout, and theme to `%APPDATA%\NetSpeedTaskbar\config.json`.
+  - **Single Instance Guard**: Uses a session mutex to ensure only one widget instance runs at a time.
+  - **Position Memory**: Saves your preferred position, layout, adapter, and theme to `%APPDATA%\NetSpeedTaskbar\config.json`.
 
 ## How to Run
 - **Option 1 (Recommended - Completely Silent)**: Double-click `Start-NetSpeedTaskbar.vbs`. It runs silently in the background with zero command prompt flash.
