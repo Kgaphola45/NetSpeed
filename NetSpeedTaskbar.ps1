@@ -832,7 +832,7 @@ $menuSnap.Header = 'Snap to Taskbar'
 
 $snapPrimaryItem = New-Object System.Windows.Controls.MenuItem
 $snapPrimaryItem.Header = 'Snap to Primary Monitor'
-$snapPrimaryItem.Add_Click({ Snap-ToTaskbar ([System.Windows.Forms.Screen]::PrimaryScreen) })
+$snapPrimaryItem.Add_Click({ Snap-ToPrimaryTaskbar })
 $menuSnap.Items.Add($snapPrimaryItem) | Out-Null
 
 $snapCurrentItem = New-Object System.Windows.Controls.MenuItem
