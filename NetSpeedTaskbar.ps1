@@ -167,6 +167,12 @@ $Themes = @{
         ValColor  = '#FFFFFF'  # Crisp White
         UnitColor = '#B2C4D4'  # Soft Slate
     }
+    'FluentLight' = @{
+        DownColor = '#00875A'  # High-Contrast Forest Emerald
+        UpColor   = '#D9531E'  # High-Contrast Burnt Orange
+        ValColor  = '#1A1A1A'  # Deep Charcoal / Black
+        UnitColor = '#475569'  # Slate Gray
+    }
     'BluePurple' = @{
         DownColor = '#60CDFF'  # Windows 11 Fluent Blue
         UpColor   = '#D177FF'  # Fluent Purple
