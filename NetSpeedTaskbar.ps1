@@ -29,7 +29,7 @@ if (-not $script:appMutex.WaitOne(0, $false)) {
     exit
 }
 
-Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
+Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms, System.Drawing
 
 # ------------------------------------------------------------------------------
 # 1. Native Win32 Interop (Safe for 32-bit & 64-bit PowerShell)
