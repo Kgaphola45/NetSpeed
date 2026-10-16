@@ -1887,7 +1887,7 @@ $menuExit.Add_Click({
 })
 $menu.Items.Add($menuExit) | Out-Null
 
-# Clean up mutex, runspaces, and ping resources when window closes
+# Clean up mutex, runspaces, hooks, and ping resources when window closes
 $win.Add_Closed({
     try {
         Save-Config
@@ -1911,6 +1911,10 @@ $win.Add_Closed({
             $script:capNotifyIcon.Dispose()
             $script:capNotifyIcon = $null
         }
+        if ($script:hWinEventHook -and $script:hWinEventHook -ne [IntPtr]::Zero) {
+            [Win32]::UnhookWinEvent($script:hWinEventHook) | Out-Null
+            $script:hWinEventHook = [IntPtr]::Zero
+        }
     } catch { }
 })
 
@@ -1920,19 +1924,50 @@ $container.ContextMenu = $menu
 # 9. Taskbar Attachment & Anti-Minimization (Win32 Hooking)
 # ------------------------------------------------------------------------------
 $script:hwnd = [IntPtr]::Zero
+$script:hWinEventHook = [IntPtr]::Zero
+$script:winEventDelegate = $null
 
 $win.Add_SourceInitialized({
     $helper = New-Object System.Windows.Interop.WindowInteropHelper($win)
     $script:hwnd = $helper.Handle
 
-    # Apply WS_EX_TOOLWINDOW (immune to Win+D show desktop) + WS_EX_NOACTIVATE (no focus steal)
+    # Apply WS_EX_TOOLWINDOW (immune to Win+D show desktop) + WS_EX_NOACTIVATE (no focus steal) + WS_EX_TOPMOST
     $exStyle = [Win32]::GetWindowLong($script:hwnd, [Win32]::GWL_EXSTYLE)
-    $newExStyle = [IntPtr]($exStyle.ToInt64() -bor [Win32]::WS_EX_TOOLWINDOW -bor [Win32]::WS_EX_NOACTIVATE)
+    $newExStyle = [IntPtr]($exStyle.ToInt64() -bor [Win32]::WS_EX_TOOLWINDOW -bor [Win32]::WS_EX_NOACTIVATE -bor [Win32]::WS_EX_TOPMOST)
     [Win32]::SetWindowLong($script:hwnd, [Win32]::GWL_EXSTYLE, $newExStyle) | Out-Null
 
     # Reassert HWND_TOPMOST over taskbar
-    [Win32]::SetWindowPos($script:hwnd, [Win32]::HWND_TOPMOST, 0, 0, 0, 0,
-        [Win32]::SWP_NOMOVE -bor [Win32]::SWP_NOSIZE -bor [Win32]::SWP_NOACTIVATE -bor [Win32]::SWP_SHOWWINDOW) | Out-Null
+    [Win32]::ForceTopmost($script:hwnd)
+
+    # Global Foreground Event Hook:
+    # Whenever the user clicks anywhere on the taskbar or switches windows, immediately ensure topmost
+    try {
+        $script:winEventDelegate = [Win32+WinEventDelegate]{
+            param($hHook, $eventType, $hwnd, $idObject, $idChild, $dwEventThread, $dwmsEventTime)
+            try {
+                if ($script:hwnd -and $script:hwnd -ne [IntPtr]::Zero) {
+                    [Win32]::ForceTopmost($script:hwnd)
+                }
+            } catch { }
+        }
+        $script:hWinEventHook = [Win32]::SetWinEventHook(
+            [Win32]::EVENT_SYSTEM_FOREGROUND,
+            [Win32]::EVENT_SYSTEM_FOREGROUND,
+            [IntPtr]::Zero,
+            $script:winEventDelegate,
+            0,
+            0,
+            [Win32]::WINEVENT_OUTOFCONTEXT
+        )
+    } catch { }
+})
+
+$win.Add_Deactivated({
+    try {
+        if ($script:hwnd -and $script:hwnd -ne [IntPtr]::Zero) {
+            [Win32]::ForceTopmost($script:hwnd)
+        }
+    } catch { }
 })
 
 # ------------------------------------------------------------------------------
