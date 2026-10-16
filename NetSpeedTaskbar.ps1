@@ -73,7 +73,10 @@ public static class Win32 {
     [DllImport("user32.dll")]
     public static extern bool SetProcessDPIAware();
 
-    public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    public static readonly IntPtr HWND_TOPMOST   = new IntPtr(-1);
+    public static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+    public static readonly IntPtr HWND_TOP       = new IntPtr(0);
+
     public const int GWL_EXSTYLE       = -20;
     public const int WS_EX_TOOLWINDOW  = 0x00000080;
     public const int WS_EX_NOACTIVATE  = 0x08000000;
@@ -82,7 +85,24 @@ public static class Win32 {
     public const uint SWP_NOSIZE       = 0x0001;
     public const uint SWP_NOMOVE       = 0x0002;
     public const uint SWP_NOACTIVATE   = 0x0010;
+    public const uint SWP_FRAMECHANGED = 0x0020;
     public const uint SWP_SHOWWINDOW   = 0x0040;
+
+    public delegate void WinEventDelegate(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr hmodWinEventProc, WinEventDelegate lpfnWinEventProc, uint idProcess, uint idThread, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    public static extern bool UnhookWinEvent(IntPtr hWinEventHook);
+
+    public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+    public const uint WINEVENT_OUTOFCONTEXT   = 0;
+
+    public static void ForceTopmost(IntPtr hWnd) {
+        if (hWnd == IntPtr.Zero) return;
+        SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    }
 }
 "@
 if (-not ([System.Management.Automation.PSTypeName]'Win32').Type) {
@@ -246,6 +266,8 @@ $xaml = @"
         Background="Transparent"
         Topmost="True"
         ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False"
         ResizeMode="NoResize">
     
     <Window.Resources>
