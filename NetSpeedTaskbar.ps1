@@ -1880,6 +1880,15 @@ $win.Add_Closed({
         if ($script:pingObj) {
             $script:pingObj.Dispose()
         }
+        if ($script:capNotifyTimer) {
+            $script:capNotifyTimer.Stop()
+            $script:capNotifyTimer = $null
+        }
+        if ($script:capNotifyIcon) {
+            $script:capNotifyIcon.Visible = $false
+            $script:capNotifyIcon.Dispose()
+            $script:capNotifyIcon = $null
+        }
     } catch { }
 })
 
@@ -2050,22 +2059,36 @@ if ($script:Config.MonthlyUsageMonth -ne $monthStr) {
     $script:Config.MonthlyTxBytes    = 0L
 }
 
+$script:capNotifyIcon  = $null
+$script:capNotifyTimer = $null
+
 function Show-CapNotification([string]$title, [string]$msg, [string]$icon = 'Warning') {
     try {
-        $balloon = New-Object System.Windows.Forms.NotifyIcon
-        $balloon.Icon = [System.Drawing.SystemIcons]::Warning
-        $balloon.Visible = $true
+        if ($null -eq $script:capNotifyIcon) {
+            $script:capNotifyIcon = New-Object System.Windows.Forms.NotifyIcon
+            $script:capNotifyIcon.Icon = [System.Drawing.SystemIcons]::Warning
+        }
         $tipIcon = if ($icon -eq 'Error') { [System.Windows.Forms.ToolTipIcon]::Error } else { [System.Windows.Forms.ToolTipIcon]::Warning }
-        $balloon.ShowBalloonTip(7000, $title, $msg, $tipIcon)
-        $cleanTimer = New-Object System.Windows.Forms.Timer
-        $cleanTimer.Interval = 8000
-        $cleanTimer.Add_Tick({
-            $balloon.Visible = $false
-            $balloon.Dispose()
-            $cleanTimer.Stop()
-            $cleanTimer.Dispose()
-        })
-        $cleanTimer.Start()
+        $script:capNotifyIcon.Visible = $true
+        $script:capNotifyIcon.ShowBalloonTip(7000, $title, $msg, $tipIcon)
+
+        if ($null -eq $script:capNotifyTimer) {
+            $script:capNotifyTimer = New-Object System.Windows.Threading.DispatcherTimer
+            $script:capNotifyTimer.Interval = [TimeSpan]::FromSeconds(8)
+            $script:capNotifyTimer.Add_Tick({
+                try {
+                    if ($null -ne $script:capNotifyTimer) {
+                        $script:capNotifyTimer.Stop()
+                    }
+                    if ($null -ne $script:capNotifyIcon) {
+                        $script:capNotifyIcon.Visible = $false
+                    }
+                } catch { }
+            })
+        } else {
+            $script:capNotifyTimer.Stop()
+        }
+        $script:capNotifyTimer.Start()
     } catch { }
 }
 
