@@ -1231,12 +1231,14 @@ $itemResetSession.Add_Click({
 
 # Dynamic update when submenu opens
 $menuDataUsage.Add_SubmenuOpened({
+    $arrowDown = [char]0x2193
+    $arrowUp   = [char]0x2191
     $tToday = $script:Config.DailyRxBytes + $script:Config.DailyTxBytes
-    $itemUsageToday.Header   = "Today:      $(Format-DataSize $tToday)  (↓ $(Format-DataSize $script:Config.DailyRxBytes) / ↑ $(Format-DataSize $script:Config.DailyTxBytes))"
+    $itemUsageToday.Header   = ('Today:      {0}  ({1} {2} / {3} {4})' -f (Format-DataSize $tToday), $arrowDown, (Format-DataSize $script:Config.DailyRxBytes), $arrowUp, (Format-DataSize $script:Config.DailyTxBytes))
     $tMonth = $script:Config.MonthlyRxBytes + $script:Config.MonthlyTxBytes
-    $itemUsageMonth.Header   = "This Month: $(Format-DataSize $tMonth)  (↓ $(Format-DataSize $script:Config.MonthlyRxBytes) / ↑ $(Format-DataSize $script:Config.MonthlyTxBytes))"
+    $itemUsageMonth.Header   = ('This Month: {0}  ({1} {2} / {3} {4})' -f (Format-DataSize $tMonth), $arrowDown, (Format-DataSize $script:Config.MonthlyRxBytes), $arrowUp, (Format-DataSize $script:Config.MonthlyTxBytes))
     $tSess  = $script:sessionRxBytes + $script:sessionTxBytes
-    $itemUsageSession.Header = "Session:    $(Format-DataSize $tSess)  (↓ $(Format-DataSize $script:sessionRxBytes) / ↑ $(Format-DataSize $script:sessionTxBytes))"
+    $itemUsageSession.Header = ('Session:    {0}  ({1} {2} / {3} {4})' -f (Format-DataSize $tSess), $arrowDown, (Format-DataSize $script:sessionRxBytes), $arrowUp, (Format-DataSize $script:sessionTxBytes))
 
     # Refresh checks
     foreach ($sub in $menuCapLimit.Items) {
@@ -1431,6 +1433,8 @@ $menuReset.Add_Click({
             Remove-Item $configFile -Force -ErrorAction SilentlyContinue
         }
         $script:Config = $defaultConfig.Clone()
+        $script:alertWarnTriggered     = $false
+        $script:alertExceededTriggered = $false
         $script:sessionRxBytes = 0L
         $script:sessionTxBytes = 0L
         $script:historyDown.Clear()
@@ -1458,6 +1462,7 @@ $menu.Items.Add($menuExit) | Out-Null
 # Clean up mutex and ping resources when window closes
 $win.Add_Closed({
     try {
+        Save-Config
         if ($script:appMutex) {
             $script:appMutex.ReleaseMutex()
             $script:appMutex.Dispose()
@@ -1802,6 +1807,8 @@ $timer.Add_Tick({
     $script:sessionRxBytes += $deltaRx
     $script:sessionTxBytes += $deltaTx
 
+    Update-DataUsage $deltaRx $deltaTx
+
     $dRx = [Math]::Max(0, $deltaRx / $elapsedSec)
     $dTx = [Math]::Max(0, $deltaTx / $elapsedSec)
     $script:prevTotals = $now
@@ -1851,6 +1858,78 @@ $timer.Add_Tick({
         $tipSessionDown.Text = Format-DataSize $script:sessionRxBytes
         $tipSessionUp.Text   = Format-DataSize $script:sessionTxBytes
         $tipLiveSpeed.Text   = ('{0}{1} ' + [char]0x2193 + '  {2}{3} ' + [char]0x2191) -f $fmtDown.Val, $fmtDown.Unit, $fmtUp.Val, $fmtUp.Unit
+
+        # Update Today and Monthly Usage in ToolTip
+        if ($tipTodayUsage) {
+            $tToday = $script:Config.DailyRxBytes + $script:Config.DailyTxBytes
+            $tipTodayUsage.Text = '{0} (↓ {1} / ↑ {2})' -f (Format-DataSize $tToday), (Format-DataSize $script:Config.DailyRxBytes), (Format-DataSize $script:Config.DailyTxBytes)
+        }
+        if ($tipMonthUsage) {
+            $tMonth = $script:Config.MonthlyRxBytes + $script:Config.MonthlyTxBytes
+            $tipMonthUsage.Text = '{0} (↓ {1} / ↑ {2})' -f (Format-DataSize $tMonth), (Format-DataSize $script:Config.MonthlyRxBytes), (Format-DataSize $script:Config.MonthlyTxBytes)
+        }
+
+        # Update Cap Warning / Progress Section & Dot
+        if ($tipCapSection) {
+            if ($script:Config.DataCapGB -gt 0) {
+                $tipCapSection.Visibility = [System.Windows.Visibility]::Visible
+                $capBytes = [double]$script:Config.DataCapGB * 1GB
+                $usedBytes = if ($script:Config.DataCapPeriod -eq 'Daily') {
+                    $script:Config.DailyRxBytes + $script:Config.DailyTxBytes
+                } else {
+                    $script:Config.MonthlyRxBytes + $script:Config.MonthlyTxBytes
+                }
+                $rawPct = ($usedBytes / $capBytes) * 100
+                $barPct = [Math]::Min(100.0, [Math]::Max(0.0, $rawPct))
+
+                if ($tipCapLabel) {
+                    $tipCapLabel.Text = "$($script:Config.DataCapPeriod) Cap ($($script:Config.DataCapGB) GB):"
+                }
+                if ($tipCapPercent) {
+                    $tipCapPercent.Text = '{0:N1}%' -f $rawPct
+                }
+                if ($tipCapFill) {
+                    $tipCapFill.Width = [Math]::Max(2.0, ($barPct / 100.0) * 210.0)
+                }
+
+                if ($rawPct -ge 100.0) {
+                    $cRed = $brushConverter.ConvertFromString('#FF4365')
+                    if ($tipCapPercent) { $tipCapPercent.Foreground = $cRed }
+                    if ($tipCapFill)    { $tipCapFill.Background = $cRed }
+                    if ($tipCapStatus) {
+                        $tipCapStatus.Text = ('[!] Data cap exceeded! ({0:N1} GB used)' -f ($usedBytes / 1GB))
+                        $tipCapStatus.Foreground = $cRed
+                        $tipCapStatus.Visibility = [System.Windows.Visibility]::Visible
+                    }
+                    if ($capWarningDot) {
+                        $capWarningDot.Fill = $cRed
+                        $capWarningDot.Visibility = [System.Windows.Visibility]::Visible
+                    }
+                } elseif ($rawPct -ge $script:Config.CapWarnPercent) {
+                    $cAmber = $brushConverter.ConvertFromString('#FFA447')
+                    if ($tipCapPercent) { $tipCapPercent.Foreground = $cAmber }
+                    if ($tipCapFill)    { $tipCapFill.Background = $cAmber }
+                    if ($tipCapStatus) {
+                        $tipCapStatus.Text = ('[!] Warning: {0:N0}% alert threshold reached ({1:N1} GB used)' -f $script:Config.CapWarnPercent, ($usedBytes / 1GB))
+                        $tipCapStatus.Foreground = $cAmber
+                        $tipCapStatus.Visibility = [System.Windows.Visibility]::Visible
+                    }
+                    if ($capWarningDot) {
+                        $capWarningDot.Fill = $cAmber
+                        $capWarningDot.Visibility = [System.Windows.Visibility]::Visible
+                    }
+                } else {
+                    $cMint = $brushConverter.ConvertFromString('#38E1B0')
+                    if ($tipCapPercent) { $tipCapPercent.Foreground = $cMint }
+                    if ($tipCapFill)    { $tipCapFill.Background = $cMint }
+                    if ($tipCapStatus)  { $tipCapStatus.Visibility = [System.Windows.Visibility]::Collapsed }
+                    if ($capWarningDot) { $capWarningDot.Visibility = [System.Windows.Visibility]::Collapsed }
+                }
+            } else {
+                $tipCapSection.Visibility = [System.Windows.Visibility]::Collapsed
+                if ($capWarningDot) { $capWarningDot.Visibility = [System.Windows.Visibility]::Collapsed }
+            }
+        }
 
         if ($null -eq $script:currentPing) {
             $tipPingText.Text = 'Checking...'

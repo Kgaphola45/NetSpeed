@@ -25,23 +25,33 @@ A high-performance, seamless network speed monitor built specifically for Window
     - **Click Shortcuts**: Configure what Double-Click and Middle-Click do.
     - **Network Adapter**: Switch between **Auto (Active Internet Gateway)**, **All Physical Adapters**, or pin to a specific adapter (e.g. Wi-Fi, Ethernet). Automatically filters out virtual clutter from WSL, Hyper-V, and VPN tunnels.
     - **Speed Unit**: Toggle between **Bytes/s** (KB/s, MB/s) for file transfer speeds and **Bits/s** (Kbps, Mbps) matching ISP bandwidth metrics.
-    - **Session Data**: View cumulative session downloaded and uploaded data with one-click counter reset.
+    - **Data Usage & Cap Alert**:
+      - Real-time tracking of **Today**, **This Month**, and **Session** traffic totals.
+      - **Data Cap Limits**: Set a limit (10 GB, 25 GB, 50 GB, 100 GB, 250 GB, 500 GB, 1 TB, or custom GB).
+      - **Cap Period**: Choose between **Monthly** or **Daily** cap cycles.
+      - **Alert Thresholds**: Get warned when reaching **70%**, **80%**, **90%**, or **95%** of your limit.
+      - **Windows Native Alerts**: Balloon/toast alert notification when reaching warning threshold or exceeding data cap.
+      - **Visual Warning Dot**: An amber dot (warning) or red dot (cap exceeded) appears in the top-right corner of the taskbar widget.
+      - **Independent Resets**: Reset Today, This Month, or Session counters anytime without losing configuration.
     - **Color Scheme**: Choose between Windows 11 Fluent (Mint & Amber), Ocean (Blue & Purple), Clean Monochrome (White & Silver), or Cyber Neon (Mint & Pink).
     - **Layout**: Switch between 2 Rows (Stacked) and 1 Row (Inline horizontal).
     - **Text Size (DPI Scaling)**: Choose between **Compact (Small)**, **Standard (Default)**, or **Large (1440p / 4K)** for optimal readability across any monitor resolution.
     - **Widget Opacity**: Adjust transparency to blend into custom wallpapers or tools like *TranslucentTB* (**100% Solid**, **85% Subtle Glass**, **70% Translucent**, **50% Minimal/Ghost**).
     - **Refresh Interval**: 0.5s (Fast), 1.0s (Normal), or 2.0s (Battery Saver).
     - **Start with Windows**: Toggle automatic launch on Windows startup (runs silently with zero console window flash).
+    - **Reset to Factory Defaults**: 1-click restore to original factory defaults and primary taskbar docking.
     - **Exit**: Gracefully terminate.
   - **Windows 11 Fluent Hover Card (Rich Tooltip)**:
     - **Connection Info**: Displays adapter name and active Wi-Fi SSID (e.g. `Wi-Fi (How-Wifi)`) or Ethernet controller.
     - **Network Details**: Real-time Local IPv4 Address and Default Gateway.
     - **Latency (Ping)**: Continuous non-blocking ping to Cloudflare DNS (`1.1.1.1`) with colored health dot.
-    - **Session Data**: Total data downloaded & uploaded this session.
+    - **Session Traffic**: Total downloaded & uploaded during the current session.
+    - **Today's & Monthly Usage**: Live Today and This Month cumulative data (both download and upload).
+    - **Data Cap Progress & Status**: Visual progress bar showing percentage of cap consumed, with warning status.
     - **Mini Sparkline Speed Graph**: Live 30-second dual-color speed history graph with dynamic peak rate indicator.
   - **Multi-Monitor & Auto-Hide Taskbar Aware**: Accurately detects taskbar height, auto-hide taskbars, and positions seamlessly across multiple monitors.
   - **Single Instance Guard**: Uses a session mutex to ensure only one widget instance runs at a time.
-  - **Position Memory**: Saves your preferred position, layout, adapter, unit, shortcuts, and theme to `%APPDATA%\NetSpeedTaskbar\config.json`.
+  - **Persistent Storage**: Safely persists your preferences, daily/monthly data usage, and data caps to `%APPDATA%\NetSpeedTaskbar\config.json`.
 
 ## How to Run
 - **Option 1 (Recommended - Completely Silent)**: Double-click `Start-NetSpeedTaskbar.vbs`. It runs silently in the background with zero command prompt flash.
