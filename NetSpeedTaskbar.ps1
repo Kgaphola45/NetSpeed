@@ -1,0 +1,678 @@
+<#
+.SYNOPSIS
+    NetSpeedTaskbar - Windows 11 Native Network Speed Taskbar Widget
+.DESCRIPTION
+    A solid, modern network speed monitor tailored specifically for Windows 11.
+    - True transparent background (floats seamlessly on the Windows 11 taskbar)
+    - Windows 11 Fluent aesthetic (Segoe UI Variable typography, vector glyphs)
+    - Stays firmly on taskbar (immune to Win+D show desktop, non-activating, auto-topmost)
+    - Draggable, position persistence, Windows 11 dark context menu, auto-start option
+#>
+
+# Ensure Single-Threaded Apartment (STA) for WPF
+if ([System.Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') {
+    $script = $MyInvocation.MyCommand.Path
+    if (-not $script) { $script = $PSCommandPath }
+    Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Sta -File `"$script`""
+    exit
+}
+
+Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
+
+# ------------------------------------------------------------------------------
+# 1. Native Win32 Interop (Safe for 32-bit & 64-bit PowerShell)
+# ------------------------------------------------------------------------------
+$win32Def = @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class Win32 {
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr", SetLastError = true)]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLong", SetLastError = true)]
+    private static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
+
+    public static IntPtr GetWindowLong(IntPtr hWnd, int nIndex) {
+        if (IntPtr.Size == 8) return GetWindowLongPtr64(hWnd, nIndex);
+        return new IntPtr(GetWindowLong32(hWnd, nIndex));
+    }
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr", SetLastError = true)]
+    private static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLong", SetLastError = true)]
+    private static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    public static IntPtr SetWindowLong(IntPtr hWnd, int nIndex, IntPtr dwNewLong) {
+        if (IntPtr.Size == 8) return SetWindowLongPtr64(hWnd, nIndex, dwNewLong);
+        return new IntPtr(SetWindowLong32(hWnd, nIndex, dwNewLong.ToInt32()));
+    }
+
+    [DllImport("user32.dll")]
+    public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GetConsoleWindow();
+
+    [DllImport("user32.dll")]
+    public static extern bool SetProcessDPIAware();
+
+    public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    public const int GWL_EXSTYLE       = -20;
+    public const int WS_EX_TOOLWINDOW  = 0x00000080;
+    public const int WS_EX_NOACTIVATE  = 0x08000000;
+    public const int WS_EX_TOPMOST     = 0x00000008;
+
+    public const uint SWP_NOSIZE       = 0x0001;
+    public const uint SWP_NOMOVE       = 0x0002;
+    public const uint SWP_NOACTIVATE   = 0x0010;
+    public const uint SWP_SHOWWINDOW   = 0x0040;
+}
+"@
+if (-not ([System.Management.Automation.PSTypeName]'Win32').Type) {
+    Add-Type -TypeDefinition $win32Def -Language CSharp
+}
+[Win32]::SetProcessDPIAware() | Out-Null
+
+# Hide host console window if launched directly
+$consoleHwnd = [Win32]::GetConsoleWindow()
+if ($consoleHwnd -ne [IntPtr]::Zero) {
+    [Win32]::ShowWindow($consoleHwnd, 0) | Out-Null
+}
+
+# ------------------------------------------------------------------------------
+# 2. Config & Persistence Management
+# ------------------------------------------------------------------------------
+$configDir  = Join-Path $env:APPDATA 'NetSpeedTaskbar'
+$configFile = Join-Path $configDir 'config.json'
+if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
+
+$defaultConfig = @{
+    Left       = $null
+    Top        = $null
+    Locked     = $false
+    Theme      = 'Fluent'       # Fluent, BluePurple, White, Cyber
+    Layout     = 'Stacked'      # Stacked (2 rows), Inline (1 row)
+    IntervalMs = 1000           # 500, 1000, 2000
+}
+
+function Load-Config {
+    if (Test-Path $configFile) {
+        try {
+            $json = Get-Content $configFile -Raw | ConvertFrom-Json
+            $cfg = $defaultConfig.Clone()
+            foreach ($prop in $json.PSObject.Properties) {
+                $cfg[$prop.Name] = $prop.Value
+            }
+            return $cfg
+        } catch { }
+    }
+    return $defaultConfig.Clone()
+}
+
+$script:Config = Load-Config
+
+function Save-Config {
+    try {
+        $script:Config | ConvertTo-Json -Depth 3 | Set-Content $configFile -Force
+    } catch { }
+}
+
+# ------------------------------------------------------------------------------
+# 3. Themes Definition (Windows 11 Palettes)
+# ------------------------------------------------------------------------------
+$Themes = @{
+    'Fluent' = @{
+        DownColor = '#38E1B0'  # Windows 11 Mint / Seafoam
+        UpColor   = '#FFA447'  # Windows 11 Warm Amber
+        ValColor  = '#FFFFFF'  # Crisp White
+        UnitColor = '#B2C4D4'  # Soft Slate
+    }
+    'BluePurple' = @{
+        DownColor = '#60CDFF'  # Windows 11 Fluent Blue
+        UpColor   = '#D177FF'  # Fluent Purple
+        ValColor  = '#FFFFFF'
+        UnitColor = '#B2C4D4'
+    }
+    'White' = @{
+        DownColor = '#E0E0E0'  # Minimal White
+        UpColor   = '#B0B0B0'  # Silver
+        ValColor  = '#FFFFFF'
+        UnitColor = '#90A0B0'
+    }
+    'Cyber' = @{
+        DownColor = '#00FFB2'  # Electric Mint
+        UpColor   = '#FF3377'  # Neon Pink
+        ValColor  = '#FFFFFF'
+        UnitColor = '#A4C0E0'
+    }
+}
+
+# ------------------------------------------------------------------------------
+# 4. WPF XAML UI (Clean, Zero-Background, Windows 11 Fluent Aesthetic)
+# ------------------------------------------------------------------------------
+$xaml = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="NetSpeedTaskbar"
+        Width="104" Height="42"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize">
+    
+    <Window.Resources>
+        <!-- Windows 11 Context Menu Dark Style -->
+        <Style TargetType="ContextMenu">
+            <Setter Property="Background" Value="#E81E1E1E"/>
+            <Setter Property="Foreground" Value="#E0E0E0"/>
+            <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="4,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="12" Direction="270" ShadowDepth="4" Color="#000000" Opacity="0.6"/>
+                            </Border.Effect>
+                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="MenuItem">
+            <Setter Property="Foreground" Value="#EBEBEB"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+
+        <Style TargetType="Separator">
+            <Setter Property="Background" Value="#22FFFFFF"/>
+            <Setter Property="Margin" Value="6,4"/>
+            <Setter Property="Height" Value="1"/>
+        </Style>
+    </Window.Resources>
+
+    <!-- Outer Interactive Border (Transparent, subtle rounded hover pill) -->
+    <Border Name="WidgetContainer"
+            Background="#01000000"
+            CornerRadius="6"
+            Padding="6,2"
+            Cursor="Hand"
+            SnapsToDevicePixels="True">
+        
+        <Border.Effect>
+            <!-- DropShadow ensures 100% legibility on light/dark taskbars & wallpapers -->
+            <DropShadowEffect BlurRadius="4" ShadowDepth="1" Direction="315" Color="#000000" Opacity="0.8"/>
+        </Border.Effect>
+
+        <Grid Name="MainContent" VerticalAlignment="Center" HorizontalAlignment="Center">
+            
+            <!-- STACKED LAYOUT (2 Rows) -->
+            <Grid Name="StackedLayout" Visibility="Visible">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="14"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Download Row -->
+                <Path Name="IconDownStacked" Grid.Row="0" Grid.Column="0"
+                      Data="M 4 1.5 L 4 7.5 M 1.5 5 L 4 7.5 L 6.5 5"
+                      Stroke="#38E1B0" StrokeThickness="1.6"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                      VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,1,0,0"/>
+                <TextBlock Grid.Row="0" Grid.Column="1"
+                           FontFamily="Segoe UI Variable Text, Segoe UI"
+                           Typography.NumeralAlignment="Tabular"
+                           VerticalAlignment="Center" Margin="2,0,0,0">
+                    <Run Name="ValDownStacked" Text="0.0" FontWeight="SemiBold" FontSize="11" Foreground="#FFFFFF"/>
+                    <Run Name="UnitDownStacked" Text=" KB/s" FontWeight="Normal" FontSize="9" Foreground="#B2C4D4"/>
+                </TextBlock>
+
+                <!-- Upload Row -->
+                <Path Name="IconUpStacked" Grid.Row="1" Grid.Column="0"
+                      Data="M 4 7.5 L 4 1.5 M 1.5 4 L 4 1.5 L 6.5 4"
+                      Stroke="#FFA447" StrokeThickness="1.6"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                      VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,1,0,0"/>
+                <TextBlock Grid.Row="1" Grid.Column="1"
+                           FontFamily="Segoe UI Variable Text, Segoe UI"
+                           Typography.NumeralAlignment="Tabular"
+                           VerticalAlignment="Center" Margin="2,0,0,0">
+                    <Run Name="ValUpStacked" Text="0.0" FontWeight="SemiBold" FontSize="11" Foreground="#FFFFFF"/>
+                    <Run Name="UnitUpStacked" Text=" KB/s" FontWeight="Normal" FontSize="9" Foreground="#B2C4D4"/>
+                </TextBlock>
+            </Grid>
+
+            <!-- INLINE LAYOUT (1 Row) -->
+            <StackPanel Name="InlineLayout" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed">
+                <Path Name="IconDownInline"
+                      Data="M 4 1.5 L 4 7.5 M 1.5 5 L 4 7.5 L 6.5 5"
+                      Stroke="#38E1B0" StrokeThickness="1.6"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                      VerticalAlignment="Center" Margin="0,1,2,0"/>
+                <TextBlock FontFamily="Segoe UI Variable Text, Segoe UI" Typography.NumeralAlignment="Tabular" VerticalAlignment="Center">
+                    <Run Name="ValDownInline" Text="0.0" FontWeight="SemiBold" FontSize="11" Foreground="#FFFFFF"/>
+                    <Run Name="UnitDownInline" Text=" KB/s" FontWeight="Normal" FontSize="9" Foreground="#B2C4D4"/>
+                </TextBlock>
+
+                <Rectangle Width="1" Height="14" Fill="#33FFFFFF" Margin="6,0,6,0"/>
+
+                <Path Name="IconUpInline"
+                      Data="M 4 7.5 L 4 1.5 M 1.5 4 L 4 1.5 L 6.5 4"
+                      Stroke="#FFA447" StrokeThickness="1.6"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                      VerticalAlignment="Center" Margin="0,1,2,0"/>
+                <TextBlock FontFamily="Segoe UI Variable Text, Segoe UI" Typography.NumeralAlignment="Tabular" VerticalAlignment="Center">
+                    <Run Name="ValUpInline" Text="0.0" FontWeight="SemiBold" FontSize="11" Foreground="#FFFFFF"/>
+                    <Run Name="UnitUpInline" Text=" KB/s" FontWeight="Normal" FontSize="9" Foreground="#B2C4D4"/>
+                </TextBlock>
+            </StackPanel>
+
+        </Grid>
+    </Border>
+</Window>
+"@
+
+$reader = [System.Xml.XmlReader]::Create([System.IO.StringReader]::new($xaml))
+$win = [System.Windows.Markup.XamlReader]::Load($reader)
+
+# Get named elements
+$container       = $win.FindName('WidgetContainer')
+$stackedLayout   = $win.FindName('StackedLayout')
+$inlineLayout    = $win.FindName('InlineLayout')
+
+$iconDownStacked = $win.FindName('IconDownStacked')
+$iconUpStacked   = $win.FindName('IconUpStacked')
+$valDownStacked  = $win.FindName('ValDownStacked')
+$unitDownStacked = $win.FindName('UnitDownStacked')
+$valUpStacked    = $win.FindName('ValUpStacked')
+$unitUpStacked   = $win.FindName('UnitUpStacked')
+
+$iconDownInline  = $win.FindName('IconDownInline')
+$iconUpInline    = $win.FindName('IconUpInline')
+$valDownInline   = $win.FindName('ValDownInline')
+$unitDownInline  = $win.FindName('UnitDownInline')
+$valUpInline     = $win.FindName('ValUpInline')
+$unitUpInline    = $win.FindName('UnitUpInline')
+
+# ------------------------------------------------------------------------------
+# 5. UI Setup & Themes Application
+# ------------------------------------------------------------------------------
+$brushConverter = New-Object System.Windows.Media.BrushConverter
+
+function Set-ThemeColors {
+    param([string]$name)
+    if (-not $Themes.ContainsKey($name)) { $name = 'Fluent' }
+    $t = $Themes[$name]
+    $script:Config.Theme = $name
+
+    $downBrush = $brushConverter.ConvertFromString($t.DownColor)
+    $upBrush   = $brushConverter.ConvertFromString($t.UpColor)
+    $valBrush  = $brushConverter.ConvertFromString($t.ValColor)
+    $unitBrush = $brushConverter.ConvertFromString($t.UnitColor)
+
+    $iconDownStacked.Stroke = $downBrush
+    $iconUpStacked.Stroke   = $upBrush
+    $valDownStacked.Foreground  = $valBrush
+    $valUpStacked.Foreground    = $valBrush
+    $unitDownStacked.Foreground = $unitBrush
+    $unitUpStacked.Foreground   = $unitBrush
+
+    $iconDownInline.Stroke = $downBrush
+    $iconUpInline.Stroke   = $upBrush
+    $valDownInline.Foreground  = $valBrush
+    $valUpInline.Foreground    = $valBrush
+    $unitDownInline.Foreground = $unitBrush
+    $unitUpInline.Foreground   = $unitBrush
+}
+
+function Set-LayoutMode {
+    param([string]$mode)
+    if ($mode -eq 'Inline') {
+        $stackedLayout.Visibility = [System.Windows.Visibility]::Collapsed
+        $inlineLayout.Visibility  = [System.Windows.Visibility]::Visible
+        $win.Width  = 168
+        $win.Height = 28
+        $script:Config.Layout = 'Inline'
+    } else {
+        $stackedLayout.Visibility = [System.Windows.Visibility]::Visible
+        $inlineLayout.Visibility  = [System.Windows.Visibility]::Collapsed
+        $win.Width  = 104
+        $win.Height = 42
+        $script:Config.Layout = 'Stacked'
+    }
+}
+
+Set-ThemeColors $script:Config.Theme
+Set-LayoutMode  $script:Config.Layout
+
+# Hover effect: subtle rounded Windows 11 pill highlight on mouse hover
+$hoverBrush       = $brushConverter.ConvertFromString('#16FFFFFF')
+$transparentBrush = $brushConverter.ConvertFromString('#01000000')
+
+$container.Add_MouseEnter({
+    $container.Background = $hoverBrush
+})
+$container.Add_MouseLeave({
+    $container.Background = $transparentBrush
+})
+
+# ------------------------------------------------------------------------------
+# 6. Windows 11 Taskbar Snapping & Positioning
+# ------------------------------------------------------------------------------
+function Snap-ToTaskbar {
+    $primaryW   = [System.Windows.SystemParameters]::PrimaryScreenWidth
+    $primaryH   = [System.Windows.SystemParameters]::PrimaryScreenHeight
+    $workBottom = [System.Windows.SystemParameters]::WorkArea.Bottom
+    
+    $tbHeight = $primaryH - $workBottom
+    if ($tbHeight -lt 30) { $tbHeight = 48 } # standard Windows 11 taskbar height
+
+    # Place in taskbar, ~240px from right screen edge (beside system tray/clock)
+    $win.Left = [Math]::Max(10, $primaryW - $win.Width - 240)
+    $win.Top  = $workBottom + [Math]::Max(0, ($tbHeight - $win.Height) / 2)
+    
+    $script:Config.Left = $win.Left
+    $script:Config.Top  = $win.Top
+    Save-Config
+}
+
+# Restore saved position or snap to taskbar
+if ($null -ne $script:Config.Left -and $null -ne $script:Config.Top) {
+    # Validate within screen bounds
+    $maxW = [System.Windows.SystemParameters]::VirtualScreenWidth
+    $maxH = [System.Windows.SystemParameters]::VirtualScreenHeight
+    if ($script:Config.Left -ge 0 -and $script:Config.Left -lt $maxW -and
+        $script:Config.Top  -ge 0 -and $script:Config.Top  -lt $maxH) {
+        $win.Left = $script:Config.Left
+        $win.Top  = $script:Config.Top
+    } else {
+        Snap-ToTaskbar
+    }
+} else {
+    Snap-ToTaskbar
+}
+
+# ------------------------------------------------------------------------------
+# 7. Drag & Drop Repositioning & Double-Click Snap
+# ------------------------------------------------------------------------------
+$container.Add_MouseLeftButtonDown({
+    param($s, $e)
+    if ($e.ClickCount -ge 2) {
+        Snap-ToTaskbar
+        return
+    }
+    if (-not $script:Config.Locked) {
+        try {
+            $win.DragMove()
+            $script:Config.Left = $win.Left
+            $script:Config.Top  = $win.Top
+            Save-Config
+        } catch { }
+    }
+})
+
+# ------------------------------------------------------------------------------
+# 8. Windows 11 Dark Context Menu
+# ------------------------------------------------------------------------------
+$menu = New-Object System.Windows.Controls.ContextMenu
+
+# Lock Position
+$menuLock = New-Object System.Windows.Controls.MenuItem
+$menuLock.Header = 'Lock Position'
+$menuLock.IsCheckable = $true
+$menuLock.IsChecked   = [bool]$script:Config.Locked
+$menuLock.Add_Click({
+    $script:Config.Locked = $menuLock.IsChecked
+    Save-Config
+})
+$menu.Items.Add($menuLock) | Out-Null
+
+# Snap to Taskbar
+$menuSnap = New-Object System.Windows.Controls.MenuItem
+$menuSnap.Header = 'Snap to Taskbar (Tray Area)'
+$menuSnap.Add_Click({ Snap-ToTaskbar })
+$menu.Items.Add($menuSnap) | Out-Null
+
+$menu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+
+# Color Scheme Submenu
+$menuThemes = New-Object System.Windows.Controls.MenuItem
+$menuThemes.Header = 'Color Scheme'
+
+$themeItems = @(
+    @{ Id = 'Fluent';     Name = 'Windows 11 Fluent (Mint & Amber)' },
+    @{ Id = 'BluePurple'; Name = 'Ocean (Fluent Blue & Purple)' },
+    @{ Id = 'White';      Name = 'Clean Monochrome (White & Silver)' },
+    @{ Id = 'Cyber';      Name = 'Cyber Neon (Mint & Pink)' }
+)
+foreach ($ti in $themeItems) {
+    $item = New-Object System.Windows.Controls.MenuItem
+    $item.Header = $ti.Name
+    $item.Tag    = $ti.Id
+    $item.IsChecked = ($script:Config.Theme -eq $ti.Id)
+    $item.Add_Click({
+        param($s, $e)
+        Set-ThemeColors $s.Tag
+        Save-Config
+        foreach ($sub in $menuThemes.Items) { $sub.IsChecked = ($sub.Tag -eq $s.Tag) }
+    })
+    $menuThemes.Items.Add($item) | Out-Null
+}
+$menu.Items.Add($menuThemes) | Out-Null
+
+# Layout Submenu
+$menuLayout = New-Object System.Windows.Controls.MenuItem
+$menuLayout.Header = 'Layout'
+
+$layoutStackedItem = New-Object System.Windows.Controls.MenuItem
+$layoutStackedItem.Header = '2 Rows (Stacked)'
+$layoutStackedItem.IsChecked = ($script:Config.Layout -ne 'Inline')
+
+$layoutInlineItem = New-Object System.Windows.Controls.MenuItem
+$layoutInlineItem.Header = '1 Row (Inline)'
+$layoutInlineItem.IsChecked = ($script:Config.Layout -eq 'Inline')
+
+$layoutStackedItem.Add_Click({
+    Set-LayoutMode 'Stacked'
+    $layoutStackedItem.IsChecked = $true
+    $layoutInlineItem.IsChecked  = $false
+    Save-Config
+})
+$layoutInlineItem.Add_Click({
+    Set-LayoutMode 'Inline'
+    $layoutStackedItem.IsChecked = $false
+    $layoutInlineItem.IsChecked  = $true
+    Save-Config
+})
+$menuLayout.Items.Add($layoutStackedItem) | Out-Null
+$menuLayout.Items.Add($layoutInlineItem) | Out-Null
+$menu.Items.Add($menuLayout) | Out-Null
+
+# Refresh Rate Submenu
+$menuRate = New-Object System.Windows.Controls.MenuItem
+$menuRate.Header = 'Refresh Interval'
+$rates = @(
+    @{ Ms = 500;  Name = 'Fast (0.5s)' },
+    @{ Ms = 1000; Name = 'Normal (1.0s)' },
+    @{ Ms = 2000; Name = 'Battery Saver (2.0s)' }
+)
+foreach ($r in $rates) {
+    $rItem = New-Object System.Windows.Controls.MenuItem
+    $rItem.Header = $r.Name
+    $rItem.Tag    = $r.Ms
+    $rItem.IsChecked = ($script:Config.IntervalMs -eq $r.Ms)
+    $rItem.Add_Click({
+        param($s, $e)
+        $script:Config.IntervalMs = [int]$s.Tag
+        $timer.Interval = [TimeSpan]::FromMilliseconds($script:Config.IntervalMs)
+        Save-Config
+        foreach ($sub in $menuRate.Items) { $sub.IsChecked = ($sub.Tag -eq $s.Tag) }
+    })
+    $menuRate.Items.Add($rItem) | Out-Null
+}
+$menu.Items.Add($menuRate) | Out-Null
+
+$menu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+
+# Start with Windows (Registry Run Key)
+$runKeyPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+$runKeyName = 'NetSpeedTaskbar'
+
+function Test-StartupEnabled {
+    return [bool](Get-ItemProperty -Path $runKeyPath -Name $runKeyName -ErrorAction SilentlyContinue)
+}
+
+$menuStartup = New-Object System.Windows.Controls.MenuItem
+$menuStartup.Header = 'Start with Windows'
+$menuStartup.IsCheckable = $true
+$menuStartup.IsChecked = Test-StartupEnabled
+$menuStartup.Add_Click({
+    if ($menuStartup.IsChecked) {
+        $myPath = $MyInvocation.MyCommand.Path
+        if (-not $myPath) { $myPath = $PSCommandPath }
+        $cmd = "powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Sta -File `"$myPath`""
+        Set-ItemProperty -Path $runKeyPath -Name $runKeyName -Value $cmd -Force
+    } else {
+        Remove-ItemProperty -Path $runKeyPath -Name $runKeyName -ErrorAction SilentlyContinue
+    }
+})
+$menu.Items.Add($menuStartup) | Out-Null
+
+$menu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+
+# Exit
+$menuExit = New-Object System.Windows.Controls.MenuItem
+$menuExit.Header = 'Exit'
+$menuExit.Add_Click({
+    $timer.Stop()
+    $win.Close()
+})
+$menu.Items.Add($menuExit) | Out-Null
+
+$container.ContextMenu = $menu
+
+# ------------------------------------------------------------------------------
+# 9. Taskbar Attachment & Anti-Minimization (Win32 Hooking)
+# ------------------------------------------------------------------------------
+$script:hwnd = [IntPtr]::Zero
+
+$win.Add_SourceInitialized({
+    $helper = New-Object System.Windows.Interop.WindowInteropHelper($win)
+    $script:hwnd = $helper.Handle
+
+    # Apply WS_EX_TOOLWINDOW (immune to Win+D show desktop) + WS_EX_NOACTIVATE (no focus steal)
+    $exStyle = [Win32]::GetWindowLong($script:hwnd, [Win32]::GWL_EXSTYLE)
+    $newExStyle = [IntPtr]($exStyle.ToInt64() -bor [Win32]::WS_EX_TOOLWINDOW -bor [Win32]::WS_EX_NOACTIVATE)
+    [Win32]::SetWindowLong($script:hwnd, [Win32]::GWL_EXSTYLE, $newExStyle) | Out-Null
+
+    # Reassert HWND_TOPMOST over taskbar
+    [Win32]::SetWindowPos($script:hwnd, [Win32]::HWND_TOPMOST, 0, 0, 0, 0,
+        [Win32]::SWP_NOMOVE -bor [Win32]::SWP_NOSIZE -bor [Win32]::SWP_NOACTIVATE -bor [Win32]::SWP_SHOWWINDOW) | Out-Null
+})
+
+# ------------------------------------------------------------------------------
+# 10. Live Network Speed Measurement & Updates
+# ------------------------------------------------------------------------------
+function Get-NetworkTotals {
+    $rx = 0L; $tx = 0L
+    foreach ($n in [Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
+        if ($n.OperationalStatus -eq 'Up' -and $n.NetworkInterfaceType -notin 'Loopback', 'Tunnel') {
+            try {
+                $s = $n.GetIPStatistics()
+                $rx += $s.BytesReceived
+                $tx += $s.BytesSent
+            } catch {
+                try {
+                    $s = $n.GetIPv4Statistics()
+                    $rx += $s.BytesReceived
+                    $tx += $s.BytesSent
+                } catch { }
+            }
+        }
+    }
+    return @($rx, $tx)
+}
+
+function Format-Speed([double]$bytesPerSec) {
+    if ($bytesPerSec -ge 1GB) {
+        return @{ Val = ('{0:N2}' -f ($bytesPerSec / 1GB)); Unit = ' GB/s' }
+    } elseif ($bytesPerSec -ge 10MB) {
+        return @{ Val = ('{0:N1}' -f ($bytesPerSec / 1MB)); Unit = ' MB/s' }
+    } elseif ($bytesPerSec -ge 1MB) {
+        return @{ Val = ('{0:N2}' -f ($bytesPerSec / 1MB)); Unit = ' MB/s' }
+    } elseif ($bytesPerSec -ge 100KB) {
+        return @{ Val = ('{0:N0}' -f ($bytesPerSec / 1KB)); Unit = ' KB/s' }
+    } elseif ($bytesPerSec -ge 1KB) {
+        return @{ Val = ('{0:N1}' -f ($bytesPerSec / 1KB)); Unit = ' KB/s' }
+    } else {
+        return @{ Val = '0.0'; Unit = ' KB/s' }
+    }
+}
+
+$script:prevTotals  = Get-NetworkTotals
+$script:stopwatch   = [System.Diagnostics.Stopwatch]::StartNew()
+$script:tickCounter = 0
+
+$timer = New-Object System.Windows.Threading.DispatcherTimer
+$timer.Interval = [TimeSpan]::FromMilliseconds($script:Config.IntervalMs)
+
+$timer.Add_Tick({
+    $now = Get-NetworkTotals
+    $elapsedSec = $script:stopwatch.Elapsed.TotalSeconds
+    $script:stopwatch.Restart()
+
+    if ($elapsedSec -le 0) { $elapsedSec = 1.0 }
+
+    $dRx = [Math]::Max(0, ($now[0] - $script:prevTotals[0]) / $elapsedSec)
+    $dTx = [Math]::Max(0, ($now[1] - $script:prevTotals[1]) / $elapsedSec)
+    $script:prevTotals = $now
+
+    $fmtDown = Format-Speed $dRx
+    $fmtUp   = Format-Speed $dTx
+
+    # Update Stacked Elements
+    $valDownStacked.Text  = $fmtDown.Val
+    $unitDownStacked.Text = $fmtDown.Unit
+    $valUpStacked.Text    = $fmtUp.Val
+    $unitUpStacked.Text   = $fmtUp.Unit
+
+    # Update Inline Elements
+    $valDownInline.Text   = $fmtDown.Val
+    $unitDownInline.Text  = $fmtDown.Unit
+    $valUpInline.Text     = $fmtUp.Val
+    $unitUpInline.Text    = $fmtUp.Unit
+
+    # Maintain Z-Order on top of taskbar (every ~3 seconds)
+    $script:tickCounter++
+    if ($script:tickCounter % 3 -eq 0 -and $script:hwnd -ne [IntPtr]::Zero) {
+        [Win32]::SetWindowPos($script:hwnd, [Win32]::HWND_TOPMOST, 0, 0, 0, 0,
+            [Win32]::SWP_NOMOVE -bor [Win32]::SWP_NOSIZE -bor [Win32]::SWP_NOACTIVATE -bor [Win32]::SWP_SHOWWINDOW) | Out-Null
+    }
+})
+
+$timer.Start()
+
+# Run the WPF Application
+[System.Windows.Application]::new().Run($win) | Out-Null
