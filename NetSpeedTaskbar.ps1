@@ -1616,6 +1616,113 @@ $script:prevTotals     = Get-NetworkTotals
 $script:stopwatch      = [System.Diagnostics.Stopwatch]::StartNew()
 $script:tickCounter    = 0
 
+$script:alertWarnTriggered     = $false
+$script:alertExceededTriggered = $false
+
+# Initialize Daily & Monthly dates on startup
+$todayStr = [DateTime]::Now.ToString('yyyy-MM-dd')
+$monthStr = [DateTime]::Now.ToString('yyyy-MM')
+
+if ($script:Config.DailyUsageDate -ne $todayStr) {
+    $script:Config.DailyUsageDate = $todayStr
+    $script:Config.DailyRxBytes   = 0L
+    $script:Config.DailyTxBytes   = 0L
+}
+
+if ($script:Config.MonthlyUsageMonth -ne $monthStr) {
+    $script:Config.MonthlyUsageMonth = $monthStr
+    $script:Config.MonthlyRxBytes    = 0L
+    $script:Config.MonthlyTxBytes    = 0L
+}
+
+function Show-CapNotification([string]$title, [string]$msg, [string]$icon = 'Warning') {
+    try {
+        $balloon = New-Object System.Windows.Forms.NotifyIcon
+        $balloon.Icon = [System.Drawing.SystemIcons]::Warning
+        $balloon.Visible = $true
+        $tipIcon = if ($icon -eq 'Error') { [System.Windows.Forms.ToolTipIcon]::Error } else { [System.Windows.Forms.ToolTipIcon]::Warning }
+        $balloon.ShowBalloonTip(7000, $title, $msg, $tipIcon)
+        $cleanTimer = New-Object System.Windows.Forms.Timer
+        $cleanTimer.Interval = 8000
+        $cleanTimer.Add_Tick({
+            $balloon.Visible = $false
+            $balloon.Dispose()
+            $cleanTimer.Stop()
+            $cleanTimer.Dispose()
+        })
+        $cleanTimer.Start()
+    } catch { }
+}
+
+function Check-DataCapAlert {
+    if ($script:Config.DataCapGB -le 0) {
+        $script:alertWarnTriggered     = $false
+        $script:alertExceededTriggered = $false
+        return
+    }
+
+    $capBytes = [double]$script:Config.DataCapGB * 1GB
+    $usedBytes = if ($script:Config.DataCapPeriod -eq 'Daily') {
+        $script:Config.DailyRxBytes + $script:Config.DailyTxBytes
+    } else {
+        $script:Config.MonthlyRxBytes + $script:Config.MonthlyTxBytes
+    }
+
+    $pct = ($usedBytes / $capBytes) * 100
+
+    if ($pct -ge 100.0 -and -not $script:alertExceededTriggered) {
+        $script:alertExceededTriggered = $true
+        $script:alertWarnTriggered     = $true
+        $usedFmt = Format-DataSize $usedBytes
+        Show-CapNotification "NetSpeedTaskbar - Data Cap Exceeded!" "You have reached 100% of your $($script:Config.DataCapGB) GB $($script:Config.DataCapPeriod.ToLower()) data cap ($usedFmt used)." 'Error'
+    } elseif ($pct -ge $script:Config.CapWarnPercent -and -not $script:alertWarnTriggered) {
+        $script:alertWarnTriggered = $true
+        $usedFmt = Format-DataSize $usedBytes
+        Show-CapNotification "NetSpeedTaskbar - Data Cap Alert ($($script:Config.CapWarnPercent)%)" "You have reached $([Math]::Round($pct, 1))% of your $($script:Config.DataCapGB) GB $($script:Config.DataCapPeriod.ToLower()) cap ($usedFmt used)." 'Warning'
+    }
+}
+
+function Update-DataUsage([long]$deltaRx, [long]$deltaTx) {
+    if ($deltaRx -le 0 -and $deltaTx -le 0) { return }
+
+    $todayNow = [DateTime]::Now.ToString('yyyy-MM-dd')
+    $monthNow = [DateTime]::Now.ToString('yyyy-MM')
+
+    # Rollover Daily if day rolled over
+    if ($script:Config.DailyUsageDate -ne $todayNow) {
+        $script:Config.DailyUsageDate  = $todayNow
+        $script:Config.DailyRxBytes    = 0L
+        $script:Config.DailyTxBytes    = 0L
+        if ($script:Config.DataCapPeriod -eq 'Daily') {
+            $script:alertWarnTriggered     = $false
+            $script:alertExceededTriggered = $false
+        }
+    }
+
+    # Rollover Monthly if month rolled over
+    if ($script:Config.MonthlyUsageMonth -ne $monthNow) {
+        $script:Config.MonthlyUsageMonth = $monthNow
+        $script:Config.MonthlyRxBytes    = 0L
+        $script:Config.MonthlyTxBytes    = 0L
+        if ($script:Config.DataCapPeriod -ne 'Daily') {
+            $script:alertWarnTriggered     = $false
+            $script:alertExceededTriggered = $false
+        }
+    }
+
+    $script:Config.DailyRxBytes   += $deltaRx
+    $script:Config.DailyTxBytes   += $deltaTx
+    $script:Config.MonthlyRxBytes += $deltaRx
+    $script:Config.MonthlyTxBytes += $deltaTx
+
+    # Periodic auto-save every ~20 seconds
+    if ($script:tickCounter % 20 -eq 0) {
+        Save-Config
+    }
+
+    Check-DataCapAlert
+}
+
 $script:pingObj        = [System.Net.NetworkInformation.Ping]::new()
 $script:pingTask       = $null
 $script:currentPing    = $null
