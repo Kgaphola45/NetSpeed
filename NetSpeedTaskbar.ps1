@@ -904,25 +904,64 @@ function Get-NetworkTotals {
     return @($rx, $tx)
 }
 
-function Format-Speed([double]$bytesPerSec) {
-    if ($bytesPerSec -ge 1GB) {
-        return @{ Val = ('{0:N2}' -f ($bytesPerSec / 1GB)); Unit = ' GB/s' }
-    } elseif ($bytesPerSec -ge 10MB) {
-        return @{ Val = ('{0:N1}' -f ($bytesPerSec / 1MB)); Unit = ' MB/s' }
-    } elseif ($bytesPerSec -ge 1MB) {
-        return @{ Val = ('{0:N2}' -f ($bytesPerSec / 1MB)); Unit = ' MB/s' }
-    } elseif ($bytesPerSec -ge 100KB) {
-        return @{ Val = ('{0:N0}' -f ($bytesPerSec / 1KB)); Unit = ' KB/s' }
-    } elseif ($bytesPerSec -ge 1KB) {
-        return @{ Val = ('{0:N1}' -f ($bytesPerSec / 1KB)); Unit = ' KB/s' }
+function Format-DataSize([long]$bytes) {
+    if ($bytes -ge 1TB) {
+        return ('{0:N2} TB' -f ($bytes / 1TB))
+    } elseif ($bytes -ge 1GB) {
+        return ('{0:N2} GB' -f ($bytes / 1GB))
+    } elseif ($bytes -ge 1MB) {
+        return ('{0:N1} MB' -f ($bytes / 1MB))
+    } elseif ($bytes -ge 1KB) {
+        return ('{0:N0} KB' -f ($bytes / 1KB))
     } else {
-        return @{ Val = '0.0'; Unit = ' KB/s' }
+        return ('{0:N0} B' -f $bytes)
     }
 }
 
-$script:prevTotals  = Get-NetworkTotals
-$script:stopwatch   = [System.Diagnostics.Stopwatch]::StartNew()
-$script:tickCounter = 0
+function Format-Speed([double]$bytesPerSec) {
+    if ($script:Config.SpeedUnit -eq 'Bits') {
+        $bps = $bytesPerSec * 8
+        if ($bps -ge 1000000000) {
+            return @{ Val = ('{0:N2}' -f ($bps / 1000000000)); Unit = ' Gbps' }
+        } elseif ($bps -ge 100000000) {
+            return @{ Val = ('{0:N0}' -f ($bps / 1000000)); Unit = ' Mbps' }
+        } elseif ($bps -ge 10000000) {
+            return @{ Val = ('{0:N1}' -f ($bps / 1000000)); Unit = ' Mbps' }
+        } elseif ($bps -ge 1000000) {
+            return @{ Val = ('{0:N2}' -f ($bps / 1000000)); Unit = ' Mbps' }
+        } elseif ($bps -ge 100000) {
+            return @{ Val = ('{0:N0}' -f ($bps / 1000)); Unit = ' Kbps' }
+        } elseif ($bps -ge 1000) {
+            return @{ Val = ('{0:N1}' -f ($bps / 1000)); Unit = ' Kbps' }
+        } else {
+            return @{ Val = '0.0'; Unit = ' Kbps' }
+        }
+    } else {
+        if ($bytesPerSec -ge 1GB) {
+            return @{ Val = ('{0:N2}' -f ($bytesPerSec / 1GB)); Unit = ' GB/s' }
+        } elseif ($bytesPerSec -ge 10MB) {
+            return @{ Val = ('{0:N1}' -f ($bytesPerSec / 1MB)); Unit = ' MB/s' }
+        } elseif ($bytesPerSec -ge 1MB) {
+            return @{ Val = ('{0:N2}' -f ($bytesPerSec / 1MB)); Unit = ' MB/s' }
+        } elseif ($bytesPerSec -ge 100KB) {
+            return @{ Val = ('{0:N0}' -f ($bytesPerSec / 1KB)); Unit = ' KB/s' }
+        } elseif ($bytesPerSec -ge 1KB) {
+            return @{ Val = ('{0:N1}' -f ($bytesPerSec / 1KB)); Unit = ' KB/s' }
+        } else {
+            return @{ Val = '0.0'; Unit = ' KB/s' }
+        }
+    }
+}
+
+$script:sessionRxBytes = 0L
+$script:sessionTxBytes = 0L
+$script:prevTotals     = Get-NetworkTotals
+$script:stopwatch      = [System.Diagnostics.Stopwatch]::StartNew()
+$script:tickCounter    = 0
+
+$script:pingObj        = [System.Net.NetworkInformation.Ping]::new()
+$script:pingTask       = $null
+$script:currentPing    = $null
 
 $timer = New-Object System.Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromMilliseconds($script:Config.IntervalMs)
@@ -934,8 +973,14 @@ $timer.Add_Tick({
 
     if ($elapsedSec -le 0) { $elapsedSec = 1.0 }
 
-    $dRx = [Math]::Max(0, ($now[0] - $script:prevTotals[0]) / $elapsedSec)
-    $dTx = [Math]::Max(0, ($now[1] - $script:prevTotals[1]) / $elapsedSec)
+    # Compute delta bytes transferred in this interval
+    $deltaRx = [Math]::Max(0L, ($now[0] - $script:prevTotals[0]))
+    $deltaTx = [Math]::Max(0L, ($now[1] - $script:prevTotals[1]))
+    $script:sessionRxBytes += $deltaRx
+    $script:sessionTxBytes += $deltaTx
+
+    $dRx = [Math]::Max(0, $deltaRx / $elapsedSec)
+    $dTx = [Math]::Max(0, $deltaTx / $elapsedSec)
     $script:prevTotals = $now
 
     $fmtDown = Format-Speed $dRx
@@ -953,8 +998,59 @@ $timer.Add_Tick({
     $valUpInline.Text     = $fmtUp.Val
     $unitUpInline.Text    = $fmtUp.Unit
 
-    # Maintain Z-Order on top of taskbar (every ~3 seconds)
+    # Asynchronous Non-Blocking Ping (every ~2 seconds)
     $script:tickCounter++
+    if ($script:tickCounter % 2 -eq 0) {
+        if ($null -eq $script:pingTask -or $script:pingTask.IsCompleted) {
+            if ($null -ne $script:pingTask -and $script:pingTask.IsCompleted -and -not $script:pingTask.IsFaulted) {
+                try {
+                    $reply = $script:pingTask.Result
+                    if ($reply.Status -eq [System.Net.NetworkInformation.IPStatus]::Success) {
+                        $script:currentPing = [int]$reply.RoundtripTime
+                    } else {
+                        $script:currentPing = -1
+                    }
+                } catch {
+                    $script:currentPing = -1
+                }
+            }
+            try {
+                $script:pingTask = $script:pingObj.SendPingAsync('1.1.1.1', 800)
+            } catch { }
+        }
+    }
+
+    # Update Tooltip Card
+    if ($tipSessionDown) {
+        $tipSessionDown.Text = Format-DataSize $script:sessionRxBytes
+        $tipLiveSpeed.Text   = ('{0}{1} ' + [char]0x2193 + '  {2}{3} ' + [char]0x2191) -f $fmtDown.Val, $fmtDown.Unit, $fmtUp.Val, $fmtUp.Unit
+
+        if ($null -eq $script:currentPing) {
+            $tipPingText.Text = 'Checking...'
+            $tipPingDot.Fill  = $brushConverter.ConvertFromString('#808080')
+        } elseif ($script:currentPing -lt 0) {
+            $tipPingText.Text = 'Offline'
+            $tipPingDot.Fill  = $brushConverter.ConvertFromString('#FF4D4D')
+        } else {
+            $tipPingText.Text = "$($script:currentPing) ms"
+            if ($script:currentPing -lt 80) {
+                $tipPingDot.Fill = $brushConverter.ConvertFromString('#38E1B0')
+            } elseif ($script:currentPing -lt 150) {
+                $tipPingDot.Fill = $brushConverter.ConvertFromString('#FFA447')
+            } else {
+                $tipPingDot.Fill = $brushConverter.ConvertFromString('#FF6060')
+            }
+        }
+
+        $activeIfaces = Get-TargetInterfaces
+        if ($activeIfaces.Count -gt 0) {
+            $tipAdapterName.Text = $activeIfaces[0].Name
+        } else {
+            $tipAdapterName.Text = 'Disconnected'
+        }
+    }
+
+    # Maintain Z-Order on top of taskbar (every ~3 seconds)
     if ($script:tickCounter % 3 -eq 0 -and $script:hwnd -ne [IntPtr]::Zero) {
         [Win32]::SetWindowPos($script:hwnd, [Win32]::HWND_TOPMOST, 0, 0, 0, 0,
             [Win32]::SWP_NOMOVE -bor [Win32]::SWP_NOSIZE -bor [Win32]::SWP_NOACTIVATE -bor [Win32]::SWP_SHOWWINDOW) | Out-Null
