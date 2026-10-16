@@ -770,7 +770,7 @@ function Invoke-ClickAction([string]$action) {
             try { Start-Process ncpa.cpl } catch { }
         }
         'Snap' {
-            Snap-ToTaskbar
+            Snap-ToPrimaryTaskbar
         }
     }
 }
