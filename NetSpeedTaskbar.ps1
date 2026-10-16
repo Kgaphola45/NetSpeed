@@ -668,31 +668,64 @@ function Get-CurrentScreen {
     }
 }
 
+function Snap-ToPrimaryTaskbar {
+    $primW  = [System.Windows.SystemParameters]::PrimaryScreenWidth
+    $primH  = [System.Windows.SystemParameters]::PrimaryScreenHeight
+    $work   = [System.Windows.SystemParameters]::WorkArea
+    $tbH    = $primH - $work.Height
+    $isAutoHide = ($tbH -lt 10)
+    if ($isAutoHide) { $tbH = 48 }
+
+    $winWidth  = if ($win.ActualWidth -gt 0) { $win.ActualWidth } else { $win.Width }
+    $winHeight = if ($win.ActualHeight -gt 0) { $win.ActualHeight } else { $win.Height }
+
+    $win.Left = [Math]::Max(10, ($primW - $winWidth - 240))
+    if ($isAutoHide) {
+        $win.Top = $primH - $winHeight - 4
+    } else {
+        $win.Top = $work.Bottom + [Math]::Max(0, ($tbH - $winHeight) / 2)
+    }
+
+    $script:Config.Left = $win.Left
+    $script:Config.Top  = $win.Top
+    Save-Config
+}
+
 function Snap-ToTaskbar {
     param([System.Windows.Forms.Screen]$targetScreen = $null)
-    if (-not $targetScreen) {
-        $targetScreen = [System.Windows.Forms.Screen]::PrimaryScreen
+    if (-not $targetScreen -or $targetScreen.Primary) {
+        Snap-ToPrimaryTaskbar
+        return
     }
 
     $bounds = $targetScreen.Bounds
     $work   = $targetScreen.WorkingArea
-
-    # Detect Auto-Hide Taskbar (work area height == screen height)
     $tbHeight = $bounds.Bottom - $work.Bottom
     $isAutoHide = ($tbHeight -lt 10)
     if ($isAutoHide) {
-        $tbHeight = 48 # Standard Windows 11 taskbar height
+        $tbHeight = 48
     }
 
-    # Place in taskbar, ~240px from right edge of selected screen (beside clock/tray)
     $winWidth  = if ($win.ActualWidth -gt 0) { $win.ActualWidth } else { $win.Width }
     $winHeight = if ($win.ActualHeight -gt 0) { $win.ActualHeight } else { $win.Height }
 
-    $win.Left = [Math]::Max($bounds.Left + 10, ($bounds.Right - $winWidth - 240))
+    # Scale factor between WinForms physical coordinates and WPF DIPs
+    $scale = 1.0
+    if ([System.Windows.SystemParameters]::PrimaryScreenWidth -gt 0 -and [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width -gt 0) {
+        $scale = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width / [System.Windows.SystemParameters]::PrimaryScreenWidth
+    }
+    if ($scale -le 0) { $scale = 1.0 }
+
+    $bLeft   = $bounds.Left / $scale
+    $bRight  = $bounds.Right / $scale
+    $bBottom = $bounds.Bottom / $scale
+    $wBottom = $work.Bottom / $scale
+
+    $win.Left = [Math]::Max($bLeft + 10, ($bRight - $winWidth - 240))
     if ($isAutoHide) {
-        $win.Top = $bounds.Bottom - $winHeight - 4
+        $win.Top = $bBottom - $winHeight - 4
     } else {
-        $win.Top = $work.Bottom + [Math]::Max(0, ($tbHeight - $winHeight) / 2)
+        $win.Top = $wBottom + [Math]::Max(0, (($tbHeight / $scale) - $winHeight) / 2)
     }
 
     $script:Config.Left = $win.Left
@@ -702,29 +735,24 @@ function Snap-ToTaskbar {
 
 # Restore saved position or snap to taskbar
 if ($null -ne $script:Config.Left -and $null -ne $script:Config.Top) {
-    # Validate whether saved coordinate is within any active monitor's bounds
-    $inBounds = $false
-    try {
-        $allScreens = [System.Windows.Forms.Screen]::AllScreens
-        foreach ($s in $allScreens) {
-            $midX = [double]$script:Config.Left + 40
-            $midY = [double]$script:Config.Top + 15
-            if ($midX -ge $s.Bounds.Left -and $midX -lt $s.Bounds.Right -and
-                $midY -ge $s.Bounds.Top  -and $midY -lt $s.Bounds.Bottom) {
-                $inBounds = $true
-                break
-            }
-        }
-    } catch { }
+    $virtL = [System.Windows.SystemParameters]::VirtualScreenLeft
+    $virtT = [System.Windows.SystemParameters]::VirtualScreenTop
+    $virtR = $virtL + [System.Windows.SystemParameters]::VirtualScreenWidth
+    $virtB = $virtT + [System.Windows.SystemParameters]::VirtualScreenHeight
 
-    if ($inBounds) {
-        $win.Left = [double]$script:Config.Left
-        $win.Top  = [double]$script:Config.Top
+    $savedL = [double]$script:Config.Left
+    $savedT = [double]$script:Config.Top
+
+    # Window must be within virtual desktop bounds
+    if ($savedL -ge ($virtL - 10) -and $savedL -le ($virtR - 40) -and
+        $savedT -ge ($virtT - 10) -and $savedT -le ($virtB - 20)) {
+        $win.Left = $savedL
+        $win.Top  = $savedT
     } else {
-        Snap-ToTaskbar ([System.Windows.Forms.Screen]::PrimaryScreen)
+        Snap-ToPrimaryTaskbar
     }
 } else {
-    Snap-ToTaskbar ([System.Windows.Forms.Screen]::PrimaryScreen)
+    Snap-ToPrimaryTaskbar
 }
 
 # ------------------------------------------------------------------------------
