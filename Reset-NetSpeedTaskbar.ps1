@@ -81,7 +81,6 @@ if (-not $NoRestart) {
         Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Sta -File `"$ps1`""
         Write-Host "      Started NetSpeedTaskbar.ps1 successfully." -ForegroundColor Green
     }
-    }
 } else {
     Write-Host "[3/3] Skipped relaunch (-NoRestart specified)." -ForegroundColor DarkGray
 }
