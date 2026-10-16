@@ -186,15 +186,22 @@ $xaml = @"
         ResizeMode="NoResize">
     
     <Window.Resources>
+        <!-- Windows 11 Dark Fluent Brushes -->
+        <SolidColorBrush x:Key="MenuBgBrush" Color="#F21E1E1E"/>
+        <SolidColorBrush x:Key="MenuBorderBrush" Color="#2EFFFFFF"/>
+        <SolidColorBrush x:Key="MenuFgBrush" Color="#F2F2F2"/>
+        <SolidColorBrush x:Key="MenuHoverBrush" Color="#1EFFFFFF"/>
+        <SolidColorBrush x:Key="MenuDisabledBrush" Color="#55FFFFFF"/>
+
         <!-- Windows 11 Context Menu Dark Style -->
         <Style TargetType="ContextMenu">
-            <Setter Property="Background" Value="#E81E1E1E"/>
-            <Setter Property="Foreground" Value="#E0E0E0"/>
-            <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+            <Setter Property="Background" Value="{StaticResource MenuBgBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource MenuFgBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource MenuBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Padding" Value="4,4"/>
+            <Setter Property="Padding" Value="4"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ContextMenu">
@@ -204,7 +211,7 @@ $xaml = @"
                                 CornerRadius="8"
                                 Padding="{TemplateBinding Padding}">
                             <Border.Effect>
-                                <DropShadowEffect BlurRadius="12" Direction="270" ShadowDepth="4" Color="#000000" Opacity="0.6"/>
+                                <DropShadowEffect BlurRadius="14" Direction="270" ShadowDepth="4" Color="#000000" Opacity="0.7"/>
                             </Border.Effect>
                             <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
                         </Border>
@@ -213,17 +220,81 @@ $xaml = @"
             </Setter>
         </Style>
 
+        <!-- Windows 11 Dark MenuItem Style with Dark Submenu Popups -->
         <Style TargetType="MenuItem">
-            <Setter Property="Foreground" Value="#EBEBEB"/>
-            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource MenuFgBrush}"/>
             <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
             <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Grid>
+                            <Border Name="ItemBorder" Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}" Margin="1">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="18"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="16"/>
+                                    </Grid.ColumnDefinitions>
+                                    <!-- Checkmark Glyph -->
+                                    <Path Name="CheckGlyph" Grid.Column="0" Data="M 2 5.5 L 5 8.5 L 10 2.5"
+                                          Stroke="#38E1B0" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          VerticalAlignment="Center" HorizontalAlignment="Left" Visibility="Collapsed"/>
+                                    <!-- Header Text -->
+                                    <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center" Margin="2,0,8,0"/>
+                                    <!-- Submenu Arrow -->
+                                    <Path Name="SubmenuArrow" Grid.Column="2" Data="M 1 1 L 5 5 L 1 9"
+                                          Stroke="#8FA3B8" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          VerticalAlignment="Center" HorizontalAlignment="Right" Visibility="Collapsed"/>
+                                </Grid>
+                            </Border>
+                            <!-- Submenu Popup (DARK THEME) -->
+                            <Popup Name="SubMenuPopup" AllowsTransparency="True" Placement="Right" VerticalOffset="-4" HorizontalOffset="2"
+                                   IsOpen="{Binding Path=IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}" Focusable="False">
+                                <Border Background="{StaticResource MenuBgBrush}"
+                                        BorderBrush="{StaticResource MenuBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        Padding="4">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="14" Direction="270" ShadowDepth="4" Color="#000000" Opacity="0.7"/>
+                                    </Border.Effect>
+                                    <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource MenuHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckGlyph" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="HasItems" Value="True">
+                                <Setter TargetName="SubmenuArrow" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="{StaticResource MenuDisabledBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style TargetType="Separator">
-            <Setter Property="Background" Value="#22FFFFFF"/>
+            <Setter Property="Background" Value="{StaticResource MenuBorderBrush}"/>
             <Setter Property="Margin" Value="6,4"/>
             <Setter Property="Height" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Separator">
+                        <Rectangle Fill="{TemplateBinding Background}" Height="1" Margin="{TemplateBinding Margin}"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- Windows 11 Fluent Dark ToolTip Style -->
