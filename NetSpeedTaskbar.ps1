@@ -1705,10 +1705,14 @@ $menuExit.Add_Click({
 })
 $menu.Items.Add($menuExit) | Out-Null
 
-# Clean up mutex and ping resources when window closes
+# Clean up mutex, runspaces, and ping resources when window closes
 $win.Add_Closed({
     try {
         Save-Config
+        if ($script:topConsumerPs) {
+            $script:topConsumerPs.Dispose()
+            $script:topConsumerPs = $null
+        }
         if ($script:appMutex) {
             $script:appMutex.ReleaseMutex()
             $script:appMutex.Dispose()
