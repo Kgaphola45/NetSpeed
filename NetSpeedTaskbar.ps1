@@ -111,6 +111,7 @@ $defaultConfig = @{
     Layout     = 'Stacked'      # Stacked (2 rows), Inline (1 row)
     IntervalMs = 1000           # 500, 1000, 2000
     Adapter    = 'Auto'         # Auto, All, or Specific Adapter Name
+    SpeedUnit  = 'Bytes'        # Bytes, Bits
 }
 
 function Load-Config {
