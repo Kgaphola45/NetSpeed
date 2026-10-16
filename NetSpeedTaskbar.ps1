@@ -1900,11 +1900,11 @@ function Check-DataCapAlert {
         $script:alertExceededTriggered = $true
         $script:alertWarnTriggered     = $true
         $usedFmt = Format-DataSize $usedBytes
-        Show-CapNotification "NetSpeedTaskbar - Data Cap Exceeded!" "You have reached 100% of your $($script:Config.DataCapGB) GB $($script:Config.DataCapPeriod.ToLower()) data cap ($usedFmt used)." 'Error'
-    } elseif ($pct -ge $script:Config.CapWarnPercent -and -not $script:alertWarnTriggered) {
+        Show-CapNotification "NetSpeedTaskbar - Data Cap Exceeded!" "You have reached 100% of your $($script:Config.DataCapGB) GB monthly data cap ($usedFmt used)." 'Error'
+    } elseif (($pct -ge 90.0 -or $usedBytes -gt ($capBytes * 0.9)) -and -not $script:alertWarnTriggered) {
         $script:alertWarnTriggered = $true
         $usedFmt = Format-DataSize $usedBytes
-        Show-CapNotification "NetSpeedTaskbar - Data Cap Alert ($($script:Config.CapWarnPercent)%)" "You have reached $([Math]::Round($pct, 1))% of your $($script:Config.DataCapGB) GB $($script:Config.DataCapPeriod.ToLower()) cap ($usedFmt used)." 'Warning'
+        Show-CapNotification "NetSpeedTaskbar - Data Cap Alarm (90%)" "Warning: You have reached 90% of your $($script:Config.DataCapGB) GB monthly cap ($usedFmt used). Speed display turned RED." 'Warning'
     }
 }
 
