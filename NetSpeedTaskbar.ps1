@@ -1023,6 +1023,7 @@ $timer.Add_Tick({
     # Update Tooltip Card
     if ($tipSessionDown) {
         $tipSessionDown.Text = Format-DataSize $script:sessionRxBytes
+        $tipSessionUp.Text   = Format-DataSize $script:sessionTxBytes
         $tipLiveSpeed.Text   = ('{0}{1} ' + [char]0x2193 + '  {2}{3} ' + [char]0x2191) -f $fmtDown.Val, $fmtDown.Unit, $fmtUp.Val, $fmtUp.Unit
 
         if ($null -eq $script:currentPing) {
