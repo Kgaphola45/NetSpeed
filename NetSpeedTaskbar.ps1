@@ -410,6 +410,45 @@ $xaml = @"
                         <TextBlock Name="TipSessionUp" Grid.Column="1" HorizontalAlignment="Right" Text="0 B" FontSize="10" FontWeight="SemiBold" Foreground="#FFA447"/>
                     </Grid>
 
+                    <Rectangle Height="1" Fill="#20FFFFFF" Margin="0,3,0,3"/>
+
+                    <!-- Today Usage -->
+                    <Grid Margin="0,1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Today:" FontSize="10" Foreground="#8FA3B8"/>
+                        <TextBlock Name="TipTodayUsage" Grid.Column="1" HorizontalAlignment="Right" Text="0 B" FontSize="10" FontWeight="SemiBold" Foreground="#FFFFFF"/>
+                    </Grid>
+
+                    <!-- This Month Usage -->
+                    <Grid Margin="0,1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="This Month:" FontSize="10" Foreground="#8FA3B8"/>
+                        <TextBlock Name="TipMonthUsage" Grid.Column="1" HorizontalAlignment="Right" Text="0 B" FontSize="10" FontWeight="SemiBold" Foreground="#FFFFFF"/>
+                    </Grid>
+
+                    <!-- Data Cap Limit Progress Section -->
+                    <StackPanel Name="TipCapSection" Visibility="Collapsed" Margin="0,2,0,0">
+                        <Grid Margin="0,1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Name="TipCapLabel" Text="Cap Limit (100 GB):" FontSize="9" Foreground="#8FA3B8"/>
+                            <TextBlock Name="TipCapPercent" Grid.Column="1" Text="0%" FontSize="9" FontWeight="SemiBold" Foreground="#38E1B0"/>
+                        </Grid>
+                        <!-- Progress Track and Fill -->
+                        <Border Height="4" Background="#26FFFFFF" CornerRadius="2" Margin="0,2,0,0">
+                            <Border Name="TipCapFill" HorizontalAlignment="Left" Width="0" Height="4" Background="#38E1B0" CornerRadius="2"/>
+                        </Border>
+                        <TextBlock Name="TipCapStatus" Text="" FontSize="9" Margin="0,2,0,0" Foreground="#FFA447" Visibility="Collapsed" TextWrapping="Wrap"/>
+                    </StackPanel>
+
                     <Rectangle Height="1" Fill="#20FFFFFF" Margin="0,4,0,4"/>
 
                     <!-- Real-Time Sparkline Speed Graph (30s) -->
@@ -438,6 +477,8 @@ $xaml = @"
         </Border.Effect>
 
         <Grid Name="MainContent" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <!-- Cap Alert Dot Indicator -->
+            <Ellipse Name="CapWarningDot" Width="4" Height="4" Fill="#FFA447" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-2,-3,0" Visibility="Collapsed"/>
             
             <!-- STACKED LAYOUT (2 Rows) -->
             <Grid Name="StackedLayout" Visibility="Visible">
