@@ -798,12 +798,15 @@ $menuExit.Add_Click({
 })
 $menu.Items.Add($menuExit) | Out-Null
 
-# Clean up mutex when window closes
+# Clean up mutex and ping resources when window closes
 $win.Add_Closed({
     try {
         if ($script:appMutex) {
             $script:appMutex.ReleaseMutex()
             $script:appMutex.Dispose()
+        }
+        if ($script:pingObj) {
+            $script:pingObj.Dispose()
         }
     } catch { }
 })
