@@ -1066,38 +1066,204 @@ $menuUnit.Items.Add($unitBytesItem) | Out-Null
 $menuUnit.Items.Add($unitBitsItem) | Out-Null
 $menu.Items.Add($menuUnit) | Out-Null
 
-# Session Data Submenu
-$menuSession = New-Object System.Windows.Controls.MenuItem
-$menuSession.Header = 'Session Data'
+# Data Usage & Cap Submenu
+$menuDataUsage = New-Object System.Windows.Controls.MenuItem
+$menuDataUsage.Header = 'Data Usage & Cap'
 
-$itemSessionDown = New-Object System.Windows.Controls.MenuItem
-$itemSessionDown.Header = 'Downloaded: 0 B'
-$itemSessionDown.IsEnabled = $false
+$itemUsageToday = New-Object System.Windows.Controls.MenuItem
+$itemUsageToday.Header = 'Today: 0 B'
+$itemUsageToday.IsEnabled = $false
 
-$itemSessionUp = New-Object System.Windows.Controls.MenuItem
-$itemSessionUp.Header = 'Uploaded: 0 B'
-$itemSessionUp.IsEnabled = $false
+$itemUsageMonth = New-Object System.Windows.Controls.MenuItem
+$itemUsageMonth.Header = 'This Month: 0 B'
+$itemUsageMonth.IsEnabled = $false
 
-$itemSessionReset = New-Object System.Windows.Controls.MenuItem
-$itemSessionReset.Header = 'Reset Session Counters'
-$itemSessionReset.Add_Click({
+$itemUsageSession = New-Object System.Windows.Controls.MenuItem
+$itemUsageSession.Header = 'Session: 0 B'
+$itemUsageSession.IsEnabled = $false
+
+# --- Data Cap Limit Submenu ---
+$menuCapLimit = New-Object System.Windows.Controls.MenuItem
+$menuCapLimit.Header = 'Data Cap Limit'
+
+$capOptions = @(
+    @{ Gb = 0;    Name = 'Disabled (Unlimited)' },
+    @{ Gb = 10;   Name = '10 GB' },
+    @{ Gb = 25;   Name = '25 GB' },
+    @{ Gb = 50;   Name = '50 GB' },
+    @{ Gb = 100;  Name = '100 GB' },
+    @{ Gb = 200;  Name = '200 GB' },
+    @{ Gb = 500;  Name = '500 GB' },
+    @{ Gb = 1000; Name = '1 TB (1000 GB)' }
+)
+
+foreach ($co in $capOptions) {
+    $itemCo = New-Object System.Windows.Controls.MenuItem
+    $itemCo.Header = $co.Name
+    $itemCo.Tag    = [double]$co.Gb
+    $itemCo.IsChecked = ([double]$script:Config.DataCapGB -eq [double]$co.Gb)
+    $itemCo.Add_Click({
+        param($s, $e)
+        $script:Config.DataCapGB = [double]$s.Tag
+        $script:alertWarnTriggered     = $false
+        $script:alertExceededTriggered = $false
+        Save-Config
+        foreach ($sub in $menuCapLimit.Items) {
+            if ($sub -is [System.Windows.Controls.MenuItem] -and $sub.Tag -ne 'custom') {
+                $sub.IsChecked = ([double]$sub.Tag -eq $script:Config.DataCapGB)
+            }
+        }
+    })
+    $menuCapLimit.Items.Add($itemCo) | Out-Null
+}
+
+$itemCustomCap = New-Object System.Windows.Controls.MenuItem
+$itemCustomCap.Header = 'Custom Limit (GB)...'
+$itemCustomCap.Tag    = 'custom'
+$itemCustomCap.Add_Click({
+    try {
+        $curVal = if ($script:Config.DataCapGB -gt 0) { $script:Config.DataCapGB } else { 100 }
+        $inputVal = [Microsoft.VisualBasic.Interaction]::InputBox(
+            "Enter Data Cap limit in Gigabytes (GB):`n(Enter 0 to disable data cap)",
+            "NetSpeedTaskbar - Set Data Cap",
+            $curVal.ToString()
+        )
+        if (-not [string]::IsNullOrWhiteSpace($inputVal)) {
+            $parsed = 0.0
+            if ([double]::TryParse($inputVal.Trim(), [ref]$parsed) -and $parsed -ge 0) {
+                $script:Config.DataCapGB = $parsed
+                $script:alertWarnTriggered     = $false
+                $script:alertExceededTriggered = $false
+                Save-Config
+            }
+        }
+    } catch { }
+})
+$menuCapLimit.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+$menuCapLimit.Items.Add($itemCustomCap) | Out-Null
+
+# --- Cap Period Submenu ---
+$menuCapPeriod = New-Object System.Windows.Controls.MenuItem
+$menuCapPeriod.Header = 'Cap Period'
+
+$itemPeriodMonthly = New-Object System.Windows.Controls.MenuItem
+$itemPeriodMonthly.Header = 'Monthly (Default)'
+$itemPeriodMonthly.Tag    = 'Monthly'
+$itemPeriodMonthly.IsChecked = ($script:Config.DataCapPeriod -ne 'Daily')
+
+$itemPeriodDaily = New-Object System.Windows.Controls.MenuItem
+$itemPeriodDaily.Header = 'Daily'
+$itemPeriodDaily.Tag    = 'Daily'
+$itemPeriodDaily.IsChecked = ($script:Config.DataCapPeriod -eq 'Daily')
+
+$itemPeriodMonthly.Add_Click({
+    $script:Config.DataCapPeriod = 'Monthly'
+    $itemPeriodMonthly.IsChecked = $true
+    $itemPeriodDaily.IsChecked   = $false
+    $script:alertWarnTriggered     = $false
+    $script:alertExceededTriggered = $false
+    Save-Config
+})
+$itemPeriodDaily.Add_Click({
+    $script:Config.DataCapPeriod = 'Daily'
+    $itemPeriodMonthly.IsChecked = $false
+    $itemPeriodDaily.IsChecked   = $true
+    $script:alertWarnTriggered     = $false
+    $script:alertExceededTriggered = $false
+    Save-Config
+})
+$menuCapPeriod.Items.Add($itemPeriodMonthly) | Out-Null
+$menuCapPeriod.Items.Add($itemPeriodDaily) | Out-Null
+
+# --- Alert Threshold Submenu ---
+$menuThreshold = New-Object System.Windows.Controls.MenuItem
+$menuThreshold.Header = 'Alert Warning At'
+
+$thresholds = @(
+    @{ Pct = 70; Name = '70% of Cap' },
+    @{ Pct = 80; Name = '80% of Cap (Default)' },
+    @{ Pct = 90; Name = '90% of Cap' },
+    @{ Pct = 95; Name = '95% of Cap' }
+)
+foreach ($th in $thresholds) {
+    $itemTh = New-Object System.Windows.Controls.MenuItem
+    $itemTh.Header = $th.Name
+    $itemTh.Tag    = [int]$th.Pct
+    $itemTh.IsChecked = ($script:Config.CapWarnPercent -eq $th.Pct)
+    $itemTh.Add_Click({
+        param($s, $e)
+        $script:Config.CapWarnPercent = [int]$s.Tag
+        $script:alertWarnTriggered = $false
+        Save-Config
+        foreach ($sub in $menuThreshold.Items) { $sub.IsChecked = ($sub.Tag -eq $s.Tag) }
+    })
+    $menuThreshold.Items.Add($itemTh) | Out-Null
+}
+
+# Reset options
+$itemResetToday = New-Object System.Windows.Controls.MenuItem
+$itemResetToday.Header = 'Reset Today''s Usage'
+$itemResetToday.Add_Click({
+    $script:Config.DailyRxBytes = 0L
+    $script:Config.DailyTxBytes = 0L
+    $script:alertWarnTriggered  = $false
+    Save-Config
+})
+
+$itemResetMonth = New-Object System.Windows.Controls.MenuItem
+$itemResetMonth.Header = 'Reset This Month''s Usage'
+$itemResetMonth.Add_Click({
+    $script:Config.MonthlyRxBytes = 0L
+    $script:Config.MonthlyTxBytes = 0L
+    $script:alertWarnTriggered     = $false
+    $script:alertExceededTriggered = $false
+    Save-Config
+})
+
+$itemResetSession = New-Object System.Windows.Controls.MenuItem
+$itemResetSession.Header = 'Reset Session Counters'
+$itemResetSession.Add_Click({
     $script:sessionRxBytes = 0L
     $script:sessionTxBytes = 0L
     $script:historyDown.Clear()
     $script:historyUp.Clear()
 })
 
-# Dynamic update on context menu opening
-$menuSession.Add_SubmenuOpened({
-    $itemSessionDown.Header = "Downloaded: $(Format-DataSize $script:sessionRxBytes)"
-    $itemSessionUp.Header   = "Uploaded:   $(Format-DataSize $script:sessionTxBytes)"
+# Dynamic update when submenu opens
+$menuDataUsage.Add_SubmenuOpened({
+    $tToday = $script:Config.DailyRxBytes + $script:Config.DailyTxBytes
+    $itemUsageToday.Header   = "Today:      $(Format-DataSize $tToday)  (↓ $(Format-DataSize $script:Config.DailyRxBytes) / ↑ $(Format-DataSize $script:Config.DailyTxBytes))"
+    $tMonth = $script:Config.MonthlyRxBytes + $script:Config.MonthlyTxBytes
+    $itemUsageMonth.Header   = "This Month: $(Format-DataSize $tMonth)  (↓ $(Format-DataSize $script:Config.MonthlyRxBytes) / ↑ $(Format-DataSize $script:Config.MonthlyTxBytes))"
+    $tSess  = $script:sessionRxBytes + $script:sessionTxBytes
+    $itemUsageSession.Header = "Session:    $(Format-DataSize $tSess)  (↓ $(Format-DataSize $script:sessionRxBytes) / ↑ $(Format-DataSize $script:sessionTxBytes))"
+
+    # Refresh checks
+    foreach ($sub in $menuCapLimit.Items) {
+        if ($sub -is [System.Windows.Controls.MenuItem] -and $sub.Tag -ne 'custom') {
+            $sub.IsChecked = ([double]$sub.Tag -eq [double]$script:Config.DataCapGB)
+        }
+    }
+    $itemPeriodMonthly.IsChecked = ($script:Config.DataCapPeriod -ne 'Daily')
+    $itemPeriodDaily.IsChecked   = ($script:Config.DataCapPeriod -eq 'Daily')
+    foreach ($sub in $menuThreshold.Items) {
+        $sub.IsChecked = ($sub.Tag -eq $script:Config.CapWarnPercent)
+    }
 })
 
-$menuSession.Items.Add($itemSessionDown) | Out-Null
-$menuSession.Items.Add($itemSessionUp) | Out-Null
-$menuSession.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
-$menuSession.Items.Add($itemSessionReset) | Out-Null
-$menu.Items.Add($menuSession) | Out-Null
+$menuDataUsage.Items.Add($itemUsageToday) | Out-Null
+$menuDataUsage.Items.Add($itemUsageMonth) | Out-Null
+$menuDataUsage.Items.Add($itemUsageSession) | Out-Null
+$menuDataUsage.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+$menuDataUsage.Items.Add($menuCapLimit) | Out-Null
+$menuDataUsage.Items.Add($menuCapPeriod) | Out-Null
+$menuDataUsage.Items.Add($menuThreshold) | Out-Null
+$menuDataUsage.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+$menuDataUsage.Items.Add($itemResetToday) | Out-Null
+$menuDataUsage.Items.Add($itemResetMonth) | Out-Null
+$menuDataUsage.Items.Add($itemResetSession) | Out-Null
+
+$menu.Items.Add($menuDataUsage) | Out-Null
 
 # Color Scheme Submenu
 $menuThemes = New-Object System.Windows.Controls.MenuItem
