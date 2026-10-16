@@ -2586,10 +2586,9 @@ $timer.Add_Tick({
         }
     }
 
-    # Maintain Z-Order on top of taskbar (every ~3 seconds)
-    if ($script:tickCounter % 3 -eq 0 -and $script:hwnd -ne [IntPtr]::Zero) {
-        [Win32]::SetWindowPos($script:hwnd, [Win32]::HWND_TOPMOST, 0, 0, 0, 0,
-            [Win32]::SWP_NOMOVE -bor [Win32]::SWP_NOSIZE -bor [Win32]::SWP_NOACTIVATE -bor [Win32]::SWP_SHOWWINDOW) | Out-Null
+    # Continuously maintain Z-Order on top of taskbar on every tick
+    if ($script:hwnd -ne [IntPtr]::Zero) {
+        [Win32]::ForceTopmost($script:hwnd)
     }
 })
 
