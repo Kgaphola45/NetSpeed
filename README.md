@@ -25,6 +25,7 @@ A high-performance, seamless network speed monitor built specifically for Window
     - **Click Shortcuts**: Configure what Double-Click and Middle-Click do.
     - **Network Adapter**: Switch between **Auto (Active Internet Gateway)**, **All Physical Adapters**, or pin to a specific adapter (e.g. Wi-Fi, Ethernet). Automatically filters out virtual clutter from WSL, Hyper-V, and VPN tunnels.
     - **Speed Unit**: Toggle between **Bytes/s** (KB/s, MB/s) for file transfer speeds and **Bits/s** (Kbps, Mbps) matching ISP bandwidth metrics.
+    - **Top Consumers (last 10s)**: Real-time "Top Talker" detection showing which apps are consuming bandwidth. Uses `Get-NetTCPConnection` + `Get-Process` and `\Process(*)\IO Data Bytes/sec` performance counters. Displays the top 3 processes (e.g. `Chrome.exe - 4.2 MB/s`). Click any process to jump into Windows Resource Monitor (`resmon.exe`) for in-depth per-connection diagnostics, or click **Refresh Now** to trigger an instant scan. 100% native, zero external tools.
     - **Data Usage & Cap Alert**:
       - Real-time tracking of **Today**, **This Month**, and **Session** traffic totals.
       - **Data Cap Limits**: Set a limit (10 GB, 25 GB, 50 GB, 100 GB, 250 GB, 500 GB, 1 TB, or custom GB).
@@ -49,6 +50,7 @@ A high-performance, seamless network speed monitor built specifically for Window
     - **Connection Info**: Displays adapter name and active Wi-Fi SSID (e.g. `Wi-Fi (How-Wifi)`) or Ethernet controller.
     - **Network Details**: Real-time Local IPv4 Address and Default Gateway.
     - **Latency (Ping)**: Continuous non-blocking ping to Cloudflare DNS (`1.1.1.1`) with colored health dot.
+    - **Top App Consumer**: Live readout of the highest bandwidth-consuming application (e.g. `Chrome.exe - 4.2 MB/s`).
     - **Session Traffic**: Total downloaded & uploaded during the current session.
     - **Today's & Monthly Usage**: Live Today and This Month cumulative data (both download and upload).
     - **Data Cap Progress & Status**: Visual progress bar showing percentage of cap consumed, with warning status.

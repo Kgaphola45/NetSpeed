@@ -2081,6 +2081,9 @@ $timer.Add_Tick({
     # Update 30-Second Sparkline History
     Update-Sparkline $dRx $dTx
 
+    # Check Top Consumer async background sampler result
+    Check-TopConsumerSample
+
     # Asynchronous Non-Blocking Ping & Auto-Theme Taskbar Check (every ~2 seconds)
     $script:tickCounter++
     if ($script:tickCounter % 2 -eq 0) {
@@ -2110,11 +2113,27 @@ $timer.Add_Tick({
         }
     }
 
+    # Periodic Top Consumer Background Sample (every ~10 seconds)
+    if ($script:tickCounter % 10 -eq 0) {
+        Start-TopConsumerSample $false
+    }
+
     # Update Tooltip Card
     if ($tipSessionDown) {
         $tipSessionDown.Text = Format-DataSize $script:sessionRxBytes
         $tipSessionUp.Text   = Format-DataSize $script:sessionTxBytes
         $tipLiveSpeed.Text   = ('{0}{1} ' + [char]0x2193 + '  {2}{3} ' + [char]0x2191) -f $fmtDown.Val, $fmtDown.Unit, $fmtUp.Val, $fmtUp.Unit
+
+        # Update Top Consumer in ToolTip
+        if ($tipTopConsumer) {
+            if ($script:topConsumersData -and $script:topConsumersData.Count -gt 0) {
+                $tipTopConsumer.Text = $script:topConsumersData[0].Display
+            } elseif ($script:topConsumerPs) {
+                $tipTopConsumer.Text = "Scanning..."
+            } else {
+                $tipTopConsumer.Text = "Idle"
+            }
+        }
 
         # Update Today and Monthly Usage in ToolTip
         $arrowDown = [char]0x2193
@@ -2247,6 +2266,9 @@ $timer.Add_Tick({
             [Win32]::SWP_NOMOVE -bor [Win32]::SWP_NOSIZE -bor [Win32]::SWP_NOACTIVATE -bor [Win32]::SWP_SHOWWINDOW) | Out-Null
     }
 })
+
+# Kick off initial background top consumers poll
+Start-TopConsumerSample $true
 
 $timer.Start()
 
