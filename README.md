@@ -26,14 +26,13 @@ A high-performance, seamless network speed monitor built specifically for Window
     - **Network Adapter**: Switch between **Auto (Active Internet Gateway)**, **All Physical Adapters**, or pin to a specific adapter (e.g. Wi-Fi, Ethernet). Automatically filters out virtual clutter from WSL, Hyper-V, and VPN tunnels.
     - **Speed Unit**: Toggle between **Bytes/s** (KB/s, MB/s) for file transfer speeds and **Bits/s** (Kbps, Mbps) matching ISP bandwidth metrics.
     - **Top Consumers (last 10s)**: Real-time "Top Talker" detection showing which apps are consuming bandwidth. Uses `Get-NetTCPConnection` + `Get-Process` and `\Process(*)\IO Data Bytes/sec` performance counters. Displays the top 3 processes (e.g. `Chrome.exe - 4.2 MB/s`). Click any process to jump into Windows Resource Monitor (`resmon.exe`) for in-depth per-connection diagnostics, or click **Refresh Now** to trigger an instant scan. 100% native, zero external tools.
-    - **Data Usage & Cap Alert**:
-      - Real-time tracking of **Today**, **This Month**, and **Session** traffic totals.
-      - **Data Cap Limits**: Set a limit (10 GB, 25 GB, 50 GB, 100 GB, 250 GB, 500 GB, 1 TB, or custom GB).
-      - **Cap Period**: Choose between **Monthly** or **Daily** cap cycles.
-      - **Alert Thresholds**: Get warned when reaching **70%**, **80%**, **90%**, or **95%** of your limit.
-      - **Windows Native Alerts**: Balloon/toast alert notification when reaching warning threshold or exceeding data cap.
-      - **Visual Warning Dot**: An amber dot (warning) or red dot (cap exceeded) appears in the top-right corner of the taskbar widget.
-      - **Independent Resets**: Reset Today, This Month, or Session counters anytime without losing configuration.
+    - **Set Monthly Cap (e.g. 200GB)** & **Data Cap Alarm**:
+      - **1-Click Right-Click Setup**: Direct `Set Monthly Cap (e.g. 200GB)...` context menu action with simple numerical dialog.
+      - **Monthly Cap Presets**: Disabled (Unlimited), 50 GB, 100 GB, 200 GB (Recommended), 300 GB, 500 GB, 1 TB, or custom GB.
+      - **90% Red Alarm**: Automatically turns widget speed text and warning dot **RED** once monthly data usage reaches 90% (`$monthTotal -gt $cap * 0.9`), visually alerting capped or metered connections.
+      - **Tooltip Progress Bar**: Visual progress bar in the hover card with live percentage (`{0:N1}%`), color-coded states (Mint <80%, Amber 80–90%, Red >90%), and alarm status message.
+      - **Windows Native Alerts**: Balloon/toast alert notification when reaching 90% alarm threshold or exceeding 100% data cap.
+      - **Traffic Totals & Resets**: Real-time tracking and independent reset options for **Today**, **This Month**, and **Session**.
     - **Color Scheme**:
       - **Auto (Matches Windows Taskbar)**: Automatically detects whether your taskbar is Dark or Light and dynamically switches text colors and contrast shadows for optimal legibility.
       - **Windows 11 Fluent (Dark)**: Mint (`#38E1B0`) and Amber (`#FFA447`) with crisp white values.
