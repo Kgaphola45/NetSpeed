@@ -396,6 +396,16 @@ $xaml = @"
                         <TextBlock Name="TipLiveSpeed" Grid.Column="1" HorizontalAlignment="Right" Text="-- KB/s" FontSize="10" Foreground="#D0E0F0"/>
                     </Grid>
 
+                    <!-- Top Bandwidth Consumer -->
+                    <Grid Margin="0,1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Top Consumer:" FontSize="10" Foreground="#8FA3B8"/>
+                        <TextBlock Name="TipTopConsumer" Grid.Column="1" HorizontalAlignment="Right" Text="Scanning..." FontSize="10" FontWeight="SemiBold" Foreground="#60CDFF" TextTrimming="CharacterEllipsis" MaxWidth="130"/>
+                    </Grid>
+
                     <!-- Session Data: Download -->
                     <Grid Margin="0,1">
                         <Grid.ColumnDefinitions>
@@ -583,6 +593,7 @@ $tipPingDot      = $win.FindName('TipPingDot')
 $tipPingText     = $win.FindName('TipPingText')
 $tipIpGateway    = $win.FindName('TipIpGateway')
 $tipLiveSpeed    = $win.FindName('TipLiveSpeed')
+$tipTopConsumer  = $win.FindName('TipTopConsumer')
 $tipSessionDown  = $win.FindName('TipSessionDown')
 $tipSessionUp    = $win.FindName('TipSessionUp')
 $tipTodayUsage   = $win.FindName('TipTodayUsage')
