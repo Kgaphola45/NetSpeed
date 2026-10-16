@@ -50,3 +50,21 @@ A high-performance, seamless network speed monitor built specifically for Window
   ```powershell
   powershell -ExecutionPolicy Bypass -WindowStyle Hidden -Sta -File .\NetSpeedTaskbar.ps1
   ```
+
+## How to Reset Data & Settings
+You can reset data and settings in two easy ways:
+
+### 1. Using the Reset Files (Quickest)
+- **One-Click Reset (Batch file)**: Double-click [`Reset-NetSpeedTaskbar.bat`](file:///c:/Users/Emmanuel_Kgaphola/Downloads/NetSpeedTaskbar/Reset-NetSpeedTaskbar.bat). It stops any active instance, wipes corrupted/stale positions and settings from `%APPDATA%\NetSpeedTaskbar\config.json`, and relaunches the widget freshly docked on your primary monitor taskbar.
+- **PowerShell Script**: Run [`Reset-NetSpeedTaskbar.ps1`](file:///c:/Users/Emmanuel_Kgaphola/Downloads/NetSpeedTaskbar/Reset-NetSpeedTaskbar.ps1):
+  ```powershell
+  # Full factory reset + restart on primary monitor:
+  .\Reset-NetSpeedTaskbar.ps1
+
+  # Reset window position only (keeps theme & preferences):
+  .\Reset-NetSpeedTaskbar.ps1 -PositionOnly
+  ```
+
+### 2. From the Right-Click Context Menu
+- **Reset Session Data Only**: Right-click widget -> **Session Data** -> click **Reset Session Counters**. This zeroes out the cumulative downloaded/uploaded counters and graph history without restarting or changing any of your preferences.
+- **Reset All Settings & Position**: Right-click widget -> click **Reset to Factory Defaults**. This restores original settings and snaps the widget directly to the primary taskbar.
