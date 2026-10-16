@@ -15,23 +15,31 @@ A high-performance, seamless network speed monitor built specifically for Window
   - Periodic topmost enforcement keeping it smoothly above the taskbar layer.
   - Automatically calculates Windows 11 taskbar height and docks beside the system tray / clock area.
 - **Mouse Interactions & Customization**:
-  - **Drag & Drop**: Left-click anywhere and drag to position it anywhere along the taskbar.
-  - **Double Click**: Quick snap back to the default taskbar tray position.
+  - **Drag & Drop**: Left-click anywhere and drag to position it anywhere along the taskbar across any of your monitors.
+  - **Configurable Click Shortcuts**:
+    - **Double-Click**: Open Task Manager (Performance tab), Windows Network Settings, Network Connections, or Snap to Taskbar.
+    - **Middle-Click**: Instant secondary shortcut (e.g. open Windows Network Settings or Task Manager).
   - **Right Click Context Menu (Windows 11 Dark Theme)**:
-    -  **Lock Position**: Prevent accidental dragging.
-    -  **Snap to Taskbar**: Realign beside system tray.
-    -  **Network Adapter**: Switch between **Auto (Active Internet Gateway)**, **All Physical Adapters**, or pin to a specific adapter (e.g. Wi-Fi, Ethernet). Automatically filters out virtual clutter from WSL, Hyper-V, and VPN tunnels.
-    -  **Speed Unit**: Toggle between **Bytes/s** (KB/s, MB/s) for file transfer speeds and **Bits/s** (Kbps, Mbps) matching ISP bandwidth metrics.
-    -  **Session Data**: View cumulative session downloaded and uploaded data with one-click counter reset.
-    -  **Color Scheme**: Choose between Windows 11 Fluent (Mint & Amber), Ocean (Blue & Purple), Clean Monochrome (White & Silver), or Cyber Neon (Mint & Pink).
-    -  **Layout**: Switch between 2 Rows (Stacked) and 1 Row (Inline horizontal).
-    -  **Refresh Interval**: 0.5s (Fast), 1.0s (Normal), or 2.0s (Battery Saver).
-    -  **Start with Windows**: Toggle automatic launch on Windows startup (runs silently with zero console window flash).
-    -  **Exit**: Gracefully terminate.
-  - **Windows 11 Fluent Hover Card (Tooltip)**: Hovering over the widget displays an interactive card showing the active adapter name, real-time Ping/latency with colored health dot, total session data downloaded/uploaded, and live combined speeds.
-  - **Real-Time Latency (Ping)**: Non-blocking asynchronous ping to Cloudflare DNS (`1.1.1.1`) reporting connection latency (ms) without ever freezing the UI thread.
+    - **Lock Position**: Prevent accidental dragging.
+    - **Snap to Taskbar (Multi-Monitor)**: Realign to the tray area on your current monitor, or pick a specific screen (Monitor 1, 2, or 3).
+    - **Click Shortcuts**: Configure what Double-Click and Middle-Click do.
+    - **Network Adapter**: Switch between **Auto (Active Internet Gateway)**, **All Physical Adapters**, or pin to a specific adapter (e.g. Wi-Fi, Ethernet). Automatically filters out virtual clutter from WSL, Hyper-V, and VPN tunnels.
+    - **Speed Unit**: Toggle between **Bytes/s** (KB/s, MB/s) for file transfer speeds and **Bits/s** (Kbps, Mbps) matching ISP bandwidth metrics.
+    - **Session Data**: View cumulative session downloaded and uploaded data with one-click counter reset.
+    - **Color Scheme**: Choose between Windows 11 Fluent (Mint & Amber), Ocean (Blue & Purple), Clean Monochrome (White & Silver), or Cyber Neon (Mint & Pink).
+    - **Layout**: Switch between 2 Rows (Stacked) and 1 Row (Inline horizontal).
+    - **Refresh Interval**: 0.5s (Fast), 1.0s (Normal), or 2.0s (Battery Saver).
+    - **Start with Windows**: Toggle automatic launch on Windows startup (runs silently with zero console window flash).
+    - **Exit**: Gracefully terminate.
+  - **Windows 11 Fluent Hover Card (Rich Tooltip)**:
+    - **Connection Info**: Displays adapter name and active Wi-Fi SSID (e.g. `Wi-Fi (How-Wifi)`) or Ethernet controller.
+    - **Network Details**: Real-time Local IPv4 Address and Default Gateway.
+    - **Latency (Ping)**: Continuous non-blocking ping to Cloudflare DNS (`1.1.1.1`) with colored health dot.
+    - **Session Data**: Total data downloaded & uploaded this session.
+    - **Mini Sparkline Speed Graph**: Live 30-second dual-color speed history graph with dynamic peak rate indicator.
+  - **Multi-Monitor & Auto-Hide Taskbar Aware**: Accurately detects taskbar height, auto-hide taskbars, and positions seamlessly across multiple monitors.
   - **Single Instance Guard**: Uses a session mutex to ensure only one widget instance runs at a time.
-  - **Position Memory**: Saves your preferred position, layout, adapter, unit, and theme to `%APPDATA%\NetSpeedTaskbar\config.json`.
+  - **Position Memory**: Saves your preferred position, layout, adapter, unit, shortcuts, and theme to `%APPDATA%\NetSpeedTaskbar\config.json`.
 
 ## How to Run
 - **Option 1 (Recommended - Completely Silent)**: Double-click `Start-NetSpeedTaskbar.vbs`. It runs silently in the background with zero command prompt flash.
