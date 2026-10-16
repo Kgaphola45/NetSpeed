@@ -1018,6 +1018,8 @@ $itemSessionReset.Header = 'Reset Session Counters'
 $itemSessionReset.Add_Click({
     $script:sessionRxBytes = 0L
     $script:sessionTxBytes = 0L
+    $script:historyDown.Clear()
+    $script:historyUp.Clear()
 })
 
 # Dynamic update on context menu opening
@@ -1187,6 +1189,29 @@ $menuStartup.Add_Click({
     }
 })
 $menu.Items.Add($menuStartup) | Out-Null
+
+# Reset to Factory Defaults
+$menuReset = New-Object System.Windows.Controls.MenuItem
+$menuReset.Header = 'Reset to Factory Defaults'
+$menuReset.Add_Click({
+    $res = [System.Windows.MessageBox]::Show("Reset all NetSpeedTaskbar settings and re-dock to primary monitor?", "NetSpeedTaskbar", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
+    if ($res -eq [System.Windows.MessageBoxResult]::Yes) {
+        if (Test-Path $configFile) {
+            Remove-Item $configFile -Force -ErrorAction SilentlyContinue
+        }
+        $script:Config = $defaultConfig.Clone()
+        $script:sessionRxBytes = 0L
+        $script:sessionTxBytes = 0L
+        $script:historyDown.Clear()
+        $script:historyUp.Clear()
+        Apply-Theme 'Fluent'
+        Set-Layout 'Stacked'
+        Set-WidgetOpacity 1.0
+        Set-FontSizePreset 'Standard'
+        Snap-ToPrimaryTaskbar
+    }
+})
+$menu.Items.Add($menuReset) | Out-Null
 
 $menu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
 
