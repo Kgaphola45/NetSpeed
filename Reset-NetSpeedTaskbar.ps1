@@ -77,12 +77,10 @@ if (-not $NoRestart) {
     $vbs = Join-Path $scriptDir 'Start-NetSpeedTaskbar.vbs'
     $ps1 = Join-Path $scriptDir 'NetSpeedTaskbar.ps1'
 
-    if (Test-Path $vbs) {
-        Start-Process "wscript.exe" -ArgumentList "`"$vbs`""
-        Write-Host "      Started silently via Start-NetSpeedTaskbar.vbs" -ForegroundColor Green
-    } elseif (Test-Path $ps1) {
+    if (Test-Path $ps1) {
         Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Sta -File `"$ps1`""
-        Write-Host "      Started via NetSpeedTaskbar.ps1" -ForegroundColor Green
+        Write-Host "      Started NetSpeedTaskbar.ps1 successfully." -ForegroundColor Green
+    }
     }
 } else {
     Write-Host "[3/3] Skipped relaunch (-NoRestart specified)." -ForegroundColor DarkGray
