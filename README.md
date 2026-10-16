@@ -18,13 +18,13 @@ A high-performance, seamless network speed monitor built specifically for Window
   - **Drag & Drop**: Left-click anywhere and drag to position it anywhere along the taskbar.
   - **Double Click**: Quick snap back to the default taskbar tray position.
   - **Right Click Context Menu (Windows 11 Dark Theme)**:
-    - 📌 **Lock Position**: Prevent accidental dragging.
-    - 🎯 **Snap to Taskbar**: Realign beside system tray.
-    - 🎨 **Color Scheme**: Choose between Windows 11 Fluent (Mint & Amber), Ocean (Blue & Purple), Clean Monochrome (White & Silver), or Cyber Neon (Mint & Pink).
-    - 📏 **Layout**: Switch between 2 Rows (Stacked) and 1 Row (Inline horizontal).
-    - ⚡ **Refresh Interval**: 0.5s (Fast), 1.0s (Normal), or 2.0s (Battery Saver).
-    - 🚀 **Start with Windows**: Toggle automatic launch on Windows startup.
-    - ❌ **Exit**: Gracefully terminate.
+    -  **Lock Position**: Prevent accidental dragging.
+    -  **Snap to Taskbar**: Realign beside system tray.
+    -  **Color Scheme**: Choose between Windows 11 Fluent (Mint & Amber), Ocean (Blue & Purple), Clean Monochrome (White & Silver), or Cyber Neon (Mint & Pink).
+    -  **Layout**: Switch between 2 Rows (Stacked) and 1 Row (Inline horizontal).
+    -  **Refresh Interval**: 0.5s (Fast), 1.0s (Normal), or 2.0s (Battery Saver).
+    -  **Start with Windows**: Toggle automatic launch on Windows startup.
+    -  **Exit**: Gracefully terminate.
   - **Position Memory**: Saves your preferred position, layout, and theme to `%APPDATA%\NetSpeedTaskbar\config.json`.
 
 ## How to Run
